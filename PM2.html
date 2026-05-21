@@ -1,0 +1,2765 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electrical Motor Control Simulator with Overload Relay & Adjustable Load</title>
+    <!-- Use Tailwind CSS for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        
+        /* --- Workspace & Background --- */
+        .workspace-bg {
+            background-color: #e2e8f0;
+            background-image: 
+                linear-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        #canvas-layer {
+            position: absolute; width: 100%; height: 100%; transform-origin: 0 0;
+            pointer-events: none; 
+        }
+        #canvas-layer > * { pointer-events: auto; }
+        
+        /* --- Wiring Styles --- */
+        svg#wire-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            overflow: visible; pointer-events: none; z-index: 35; /* ปรับให้สูงกว่าอุปกรณ์ (10) เพื่อให้สายอยู่ด้านบน */
+        }
+        .wire-path {
+            fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;
+            pointer-events: auto; cursor: pointer; transition: stroke-width 0.1s, filter 0.1s;
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+        }
+        .wire-path:hover { stroke-width: 6; filter: drop-shadow(3px 3px 3px rgba(0,0,0,0.5)); }
+        
+        .wire-live { stroke-dasharray: 10, 6; animation: wire-flow 0.6s linear infinite; filter: drop-shadow(0 0 5px currentColor); }
+        @keyframes wire-flow { to { stroke-dashoffset: -16; } }
+
+        /* --- Terminals --- */
+        .terminal {
+            position: absolute; width: 14px; height: 14px; background: #e5e7eb;
+            border: 2px solid #64748b; border-radius: 50%; cursor: crosshair; z-index: 40;
+            box-shadow: inset 1px 1px 2px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.5);
+            transition: transform 0.1s, background 0.1s, border-color 0.1s, box-shadow 0.1s;
+        }
+        .terminal:hover, .terminal.snap-candidate { 
+            background: #fbbf24; 
+            transform: scale(1.3); 
+            border-color: #b45309;
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.8), inset 1px 1px 2px rgba(0,0,0,0.2);
+        }
+        
+        /* Inner screw detail */
+        .terminal::after {
+            content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 2px; background: #94a3b8; border-radius: 1px; pointer-events: none;
+        }
+
+        .terminal-lg { width: 28px !important; height: 28px !important; }
+        .terminal-lg::after { width: 16px !important; height: 4px !important; }
+        .terminal-md { width: 20px !important; height: 20px !important; }
+        .terminal-md::after { width: 12px !important; height: 3px !important; }
+
+        .terminal-label {
+            position: absolute; font-size: 10px; font-weight: bold; color: #334155;
+            pointer-events: none; white-space: nowrap;
+        }
+
+        /* --- Component Shared Styles --- */
+        .draggable-item { 
+            position: absolute; cursor: grab; z-index: 10; 
+            transform-origin: center; filter: drop-shadow(3px 5px 8px rgba(0,0,0,0.3));
+        }
+        .draggable-item:active { cursor: grabbing; z-index: 50; }
+        
+        .selected-component {
+            outline: 3px dashed #0ea5e9 !important; outline-offset: 4px;
+            filter: drop-shadow(0 0 12px rgba(14, 165, 233, 0.5)); z-index: 15 !important;
+        }
+        .selected-wire { stroke-dasharray: 6, 6; animation: dash 0.5s linear infinite; filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.8)); }
+
+        /* --- Specific Electrical Components --- */
+
+        /* 1. Main Breaker Box (MDB) */
+        .comp-mainbox {
+            width: 440px; height: 380px; background: #e2e8f0; border: 4px solid #64748b;
+            border-radius: 12px; position: relative; box-shadow: inset 4px 4px 10px rgba(255,255,255,0.8), 4px 8px 16px rgba(0,0,0,0.2);
+        }
+        .breaker-switch {
+            width: 120px; height: 100px; background: #334155; border-radius: 8px;
+            position: absolute; top: 60px; left: 40px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            border: 4px solid #1e293b; transition: all 0.2s; box-shadow: inset 0 4px 10px rgba(0,0,0,0.8);
+        }
+        .breaker-handle {
+            width: 80px; height: 40px; background: #ef4444; border-radius: 4px;
+            box-shadow: inset 0 4px 8px rgba(255,255,255,0.3), 0 4px 8px rgba(0,0,0,0.5);
+            transition: transform 0.1s ease-in-out, background 0.2s, box-shadow 0.2s; transform: translateY(24px);
+        }
+        .comp-mainbox.on .breaker-handle {
+            transform: translateY(-24px); background: #22c55e;
+            box-shadow: inset 0 4px 8px rgba(255,255,255,0.5), 0 4px 20px rgba(34, 197, 94, 0.8);
+        }
+        .busbar {
+            position: absolute; width: 340px; height: 28px; border-radius: 4px;
+            border: 2px solid rgba(0,0,0,0.4); box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+        }
+        .busbar.neutral { background: linear-gradient(to bottom, #e2e8f0, #94a3b8); bottom: 100px; left: 50px; }
+        .busbar.ground { background: repeating-linear-gradient(45deg, #22c55e, #22c55e 16px, #eab308 16px, #eab308 32px); bottom: 40px; left: 50px; border-color: #15803d; }
+        
+        .box-warning {
+            position: absolute; top: 20px; right: 20px; width: 60px; height: 60px;
+            background: #eab308; border-radius: 4px; border: 4px solid #1e293b;
+            display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 36px; color: #1e293b;
+        }
+
+        /* 2. Magnetic Contactor (S-N10 Style) */
+        .comp-contactor {
+            width: 158px; height: 230px; background: #e8e6dd; border: 1px solid #d1cec5;
+            border-radius: 4px; position: relative;
+            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.8), 2px 4px 8px rgba(0,0,0,0.2);
+        }
+        .comp-contactor::before {
+            content: ''; position: absolute; left: 10px; right: 10px; top: 48px; bottom: 48px;
+            background: #dfddd4; border-radius: 2px; border: 1px solid #ccc9c0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .sn10-core-bg {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 50px; height: 50px; background: #222; border-radius: 2px;
+            border: 2px solid #111; z-index: 1;
+        }
+        .contactor-core {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 36px; height: 36px; background: #111; border: 1px solid #333;
+            display: flex; justify-content: space-evenly; align-items: center;
+            transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.5); z-index: 2;
+        }
+        .comp-contactor.active {
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.5), inset 2px 2px 5px rgba(255,255,255,0.8);
+            border-color: #38bdf8;
+        }
+        .comp-contactor.active .contactor-core {
+            transform: translate(-50%, -50%) scale(0.95) translateY(4px); 
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.8), 0 0 10px rgba(14, 165, 233, 0.8);
+            background: #000;
+        }
+        .core-hole { width: 10px; height: 16px; background: #000; border-radius: 1px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.1); }
+        .sn10-label {
+            position: absolute; left: 14px; top: 105px; background: #0284c7; color: white;
+            font-weight: bold; font-family: 'Arial', sans-serif; font-size: 13px; padding: 2px 6px;
+            border-radius: 2px; box-shadow: 1px 1px 2px rgba(0,0,0,0.3); z-index: 3; letter-spacing: 0.5px;
+        }
+        .sn10-text { position: absolute; font-size: 9px; font-weight: bold; color: #0284c7; pointer-events: none; text-align: center; width: 30px; z-index: 3; }
+        .sn10-text.black { color: #333; }
+        .terminal-plate {
+            position: absolute; width: 22px; height: 22px; background: linear-gradient(to bottom, #f8fafc, #cbd5e1);
+            border: 1px solid #94a3b8; border-radius: 2px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.8); z-index: 2;
+        }
+
+        /* 3. Thermal Overload Relay (NEW) */
+        .comp-overload {
+            width: 158px; height: 195px; background: #2f3542; border: 1px solid #1e222b;
+            border-radius: 4px; position: relative;
+            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.1), 2px 4px 8px rgba(0,0,0,0.3);
+        }
+        .overload-dial {
+            position: absolute; top: 48px; left: 15px; width: 32px; height: 32px;
+            border-radius: 50%; background: #eceff1; border: 2px dashed #78909c;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .overload-dial::after {
+            content: ''; position: absolute; width: 14px; height: 3px; background: #ef4444;
+            transform: rotate(45deg); border-radius: 1px;
+        }
+        .overload-trip-btn {
+            position: absolute; top: 48px; left: 58px; width: 22px; height: 22px;
+            background: #ef4444; border: 1px solid #b91c1c; border-radius: 2px;
+            cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: bold;
+        }
+        .overload-trip-btn:active { transform: translateY(1px); box-shadow: none; }
+        .overload-reset-btn {
+            position: absolute; top: 48px; left: 88px; width: 22px; height: 22px;
+            background: #3b82f6; border: 1px solid #1d4ed8; border-radius: 50%;
+            cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: bold;
+        }
+        .overload-reset-btn:active { transform: translateY(1px); box-shadow: none; }
+        .overload-label {
+            position: absolute; left: 14px; top: 12px; background: #e2e8f0; color: #1e293b;
+            font-weight: bold; font-family: 'Arial', sans-serif; font-size: 11px; padding: 1px 6px;
+            border-radius: 2px; border: 1px solid #94a3b8;
+        }
+        .comp-overload.tripped::after {
+            content: 'TRIPPED'; position: absolute; right: 8px; top: 15px; background: #ef4444;
+            color: white; font-size: 9px; font-weight: bold; padding: 1px 4px; border-radius: 2px;
+            animation: pulse 0.6s infinite alternate;
+            box-shadow: 0 0 10px #ef4444;
+        }
+        .comp-overload.tripped {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.5), inset 2px 2px 5px rgba(255,255,255,0.1);
+            border-color: #ef4444;
+        }
+        @keyframes pulse { 0% { opacity: 0.6; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1.05); } }
+
+        /* Thermal Heat Stack Indicator Graphic */
+        .thermal-bar-container {
+            position: absolute; left: 15px; top: 42px; width: 95px; height: 4px;
+            background: #1e222b; border-radius: 1px; overflow: hidden;
+        }
+        .thermal-bar {
+            width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #eab308, #ef4444);
+            transition: width 0.3s;
+        }
+
+        /* 4. Push Buttons */
+        .comp-button {
+            width: 80px; height: 110px; background: #f8fafc; border: 2px solid #cbd5e1;
+            border-radius: 4px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .btn-head {
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            box-shadow: 0 6px 0 #94a3b8, 0 8px 10px rgba(0,0,0,0.3); transition: all 0.1s; border: 2px solid rgba(0,0,0,0.2);
+        }
+        .btn-head:active, .comp-button.pressed .btn-head {
+            transform: translateY(6px); box-shadow: 0 0 0 #94a3b8, 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .btn-green { background: radial-gradient(circle at 30% 30%, #4ade80, #16a34a); }
+        .btn-green:active, .comp-button.pressed .btn-green { background: #16a34a; }
+        .btn-red { background: radial-gradient(circle at 30% 30%, #f87171, #dc2626); }
+        .btn-red:active, .comp-button.pressed .btn-red { background: #dc2626; }
+
+        /* 5. Pilot Lamp */
+        .comp-lamp {
+            width: 60px; height: 80px; background: #f8fafc; border: 2px solid #cbd5e1;
+            border-radius: 4px; position: relative; display: flex; justify-content: center;
+        }
+        .lamp-bulb {
+            width: 44px; height: 44px; border-radius: 50%; margin-top: 8px;
+            background: radial-gradient(circle at 30% 30%, #e2e8f0, #94a3b8); border: 2px solid #64748b;
+            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.5), 0 4px 6px rgba(0,0,0,0.2); transition: all 0.2s;
+        }
+        .comp-lamp.active .lamp-bulb.color-green { background: radial-gradient(circle at 40% 40%, #86efac, #16a34a); box-shadow: 0 0 25px 5px rgba(34, 197, 94, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #15803d; }
+        .comp-lamp.active .lamp-bulb.color-red { background: radial-gradient(circle at 40% 40%, #fca5a5, #dc2626); box-shadow: 0 0 25px 5px rgba(239, 68, 68, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #b91c1c; }
+        .comp-lamp.active .lamp-bulb.color-yellow { background: radial-gradient(circle at 40% 40%, #fef08a, #d97706); box-shadow: 0 0 25px 5px rgba(234, 179, 8, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #a16207; }
+
+        /* 6. 3-Phase Motor */
+        .comp-motor {
+            width: 150px; height: 185px; position: relative; display: flex; flex-direction: column; align-items: center;
+        }
+        .motor-body {
+            width: 120px; height: 120px; border-radius: 50%; background: #94a3b8;
+            border: 4px solid #475569; position: relative; display: flex; justify-content: center; align-items: center;
+            box-shadow: inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5), 0 10px 15px rgba(0,0,0,0.4);
+            overflow: hidden;
+            transition: box-shadow 0.3s, border-color 0.3s;
+        }
+        .motor-label { font-size: 32px; font-weight: 900; color: #1e293b; text-shadow: 1px 1px 2px rgba(255,255,255,0.5); z-index: 3; }
+        .motor-rotor {
+            position: absolute; width: 84%; height: 84%; border-radius: 50%;
+            border: 8px dashed rgba(0,0,0,0.15); transition: transform 0.2s;
+            z-index: 2;
+        }
+        .motor-terminal-box {
+            width: 110px; height: 60px; background: #64748b; border: 2px solid #334155;
+            border-radius: 4px 4px 0 0; position: relative; margin-bottom: -10px; z-index: 4;
+            display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; gap: 6px;
+        }
+        
+        /* Active Motor States */
+        .comp-motor.spin-fwd .motor-body {
+            border-color: #22c55e;
+            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6), inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5);
+        }
+        .comp-motor.spin-rev .motor-body {
+            border-color: #ef4444;
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.6), inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5);
+        }
+        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 10px; animation: spin 0.25s linear infinite; filter: drop-shadow(0 0 4px #22c55e); }
+        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 10px; animation: spin-rev 0.25s linear infinite; filter: drop-shadow(0 0 4px #ef4444); }
+        
+        /* Motor indicators */
+        .motor-load-gauge {
+            width: 130px; background: rgba(15, 23, 42, 0.85); color: #22c55e;
+            font-family: monospace; font-size: 9px; border-radius: 4px; padding: 2px 4px;
+            text-align: center; margin-top: 4px; border: 1px solid #334155; z-index: 10;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
+        }
+        .motor-load-gauge.overloaded { color: #ef4444; border-color: #ef4444; text-shadow: 0 0 5px #ef4444; animation: flash-gauge 0.5s infinite alternate; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 0 5px rgba(0,0,0,0.8); }
+
+        .speed-indicator.bg-green-600 { box-shadow: 0 0 10px rgba(34, 197, 94, 0.8); }
+        .speed-indicator.bg-red-600 { box-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
+
+        @keyframes flash-gauge { 0% { opacity: 0.8; } 100% { opacity: 1; } }
+
+        /* 7. 3-Phase Breaker (MCCB) */
+        .comp-breaker3p {
+            width: 130px; height: 190px; background: #f8fafc; border: 2px solid #cbd5e1;
+            border-radius: 6px; position: relative; box-shadow: 2px 4px 8px rgba(0,0,0,0.2);
+        }
+        .breaker3p-switch-container {
+            width: 44px; height: 60px; background: #334155; border: 2px solid #1e293b;
+            border-radius: 2px; position: absolute; top: 65px; left: 41px;
+            display: flex; justify-content: center; align-items: center; overflow: hidden;
+        }
+        .breaker3p-handle {
+            width: 30px; height: 30px; background: #111; border-radius: 2px; cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 6px rgba(0,0,0,0.5);
+            transition: transform 0.1s, background 0.2s, box-shadow 0.2s; position: relative; z-index: 2;
+        }
+        .breaker3p-bg-on { position: absolute; top: 4px; color: #ef4444; font-size: 10px; font-weight: bold; }
+        .breaker3p-bg-off { position: absolute; bottom: 4px; color: #22c55e; font-size: 10px; font-weight: bold; }
+        .comp-breaker3p.on .breaker3p-handle { 
+            transform: translateY(-12px); 
+            background: #22c55e;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), 0 4px 10px rgba(34, 197, 94, 0.8);
+        }
+        .comp-breaker3p.off .breaker3p-handle { transform: translateY(12px); background: #111; }
+        
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin-rev { 100% { transform: rotate(-360deg); } }
+
+        /* 8. Timer Relay */
+        .comp-timer {
+            width: 140px; height: 180px; background: #f8fafc; border: 2px solid #cbd5e1;
+            border-radius: 6px; position: relative; box-shadow: 2px 4px 8px rgba(0,0,0,0.2);
+        }
+        .timer-dial-bg {
+            position: absolute; top: 40px; left: 28px; width: 80px; height: 80px;
+            border-radius: 50%; background: #e2e8f0; border: 2px solid #94a3b8;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2);
+        }
+        .timer-dial-knob {
+            width: 56px; height: 56px; border-radius: 50%; background: #334155;
+            position: relative; transition: transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .timer-dial-knob::after {
+            content: ''; position: absolute; top: 4px; left: 26px; width: 4px; height: 16px;
+            background: #f8fafc; border-radius: 2px;
+        }
+        .timer-led { width: 10px; height: 10px; border-radius: 50%; background: #64748b; border: 1px solid #475569; transition: all 0.2s; }
+        .timer-led.on { background: #22c55e; box-shadow: 0 0 8px #22c55e; border-color: #15803d; }
+        .timer-led.up { background: #ef4444; box-shadow: 0 0 8px #ef4444; border-color: #b91c1c; }
+
+        /* --- Explosion Effects --- */
+        @keyframes shake-violent {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-3px, -4px) rotate(-1deg); }
+            20% { transform: translate(-5px, 0px) rotate(2deg); }
+            30% { transform: translate(5px, 4px) rotate(0deg); }
+            40% { transform: translate(3px, -3px) rotate(2deg); }
+            50% { transform: translate(-3px, 4px) rotate(-2deg); }
+            60% { transform: translate(-5px, 2px) rotate(0deg); }
+            70% { transform: translate(5px, 2px) rotate(-1deg); }
+            80% { transform: translate(-3px, -3px) rotate(2deg); }
+            90% { transform: translate(3px, 4px) rotate(0deg); }
+            100% { transform: translate(1px, -4px) rotate(-1deg); }
+        }
+        .shake-effect {
+            animation: shake-violent 0.4s cubic-bezier(.36,.07,.19,.97) both;
+            animation-iteration-count: 2;
+        }
+        #explosion-overlay {
+            background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,100,0,0.8) 30%, rgba(50,0,0,0.9) 100%);
+            animation: flash 0.3s ease-out;
+        }
+        @keyframes flash {
+            0% { opacity: 0; }
+            30% { opacity: 1; }
+            100% { opacity: 1; }
+        }
+
+    </style>
+</head>
+<body class="min-h-screen w-full flex flex-col h-screen">
+
+    <!-- Auth Overlay -->
+    <div id="authOverlay" class="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white rounded-[30px] p-8 max-w-md w-full shadow-2xl border-4 border-slate-200">
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner border-4 border-white">
+                    <i class="fas fa-plug"></i>
+                </div>
+                <h2 class="text-2xl font-black text-slate-800">วงจรควบคุมมอเตอร์</h2>
+                <p class="text-sm text-gray-500 mt-1">กรุณาล็อกอินด้วยบัญชีนักเรียน (KidLearning)</p>
+            </div>
+            <form id="loginFormSim" class="space-y-3">
+                <input type="email" id="loginEmailSim" required class="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-2xl outline-none transition font-medium" placeholder="อีเมล">
+                <input type="password" id="loginPasswordSim" required class="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-2xl outline-none transition font-medium" placeholder="รหัสผ่าน">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition shadow-lg flex justify-center items-center gap-2">
+                    <i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบจำลอง
+                </button>
+                
+                <div class="relative flex items-center py-2">
+                    <div class="flex-grow border-t border-gray-300"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-400 text-xs">หรือ</span>
+                    <div class="flex-grow border-t border-gray-300"></div>
+                </div>
+                
+                <!-- Guest Login Button -->
+                <button type="button" id="btnGuestLogin" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-2xl border-2 border-slate-200 transition flex justify-center items-center gap-2">
+                    <i class="fas fa-eye"></i> ทดลองใช้งาน (อ่านเท่านั้น)
+                </button>
+            </form>
+            <div id="loginMsg" class="mt-4 text-center text-sm font-bold text-red-500 hidden bg-red-50 py-2 rounded-xl border border-red-100"></div>
+        </div>
+    </div>
+
+    <!-- Top Header -->
+    <header class="h-14 bg-slate-800 border-b border-slate-900 flex items-center justify-between px-6 shadow-md z-[60] shrink-0 w-full text-white">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-500 rounded flex items-center justify-center font-bold text-xl shadow-inner border border-blue-400">M</div>
+            <h1 class="text-lg font-bold tracking-wide hidden sm:block">จำลองวงจรควบคุมมอเตอร์ไฟฟ้า <span class="text-xs font-normal text-slate-400">Electrical Simulator</span></h1>
+        </div>
+        <div class="flex items-center gap-4">
+            
+            <!-- Admin Button -->
+            <button onclick="openAdminPanel()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 rounded transition text-sm flex items-center gap-1 shadow-md" title="การจัดการระบบ (Admin)">
+                <i class="fas fa-user-shield"></i><span class="hidden md:inline"> Admin</span>
+            </button>
+            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+
+            <!-- User Profile Display -->
+            <div id="userProfileBadge" class="hidden items-center gap-2 bg-slate-700 px-3 py-1.5 rounded border border-slate-600">
+                <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs shadow-inner"><i class="fas fa-user text-white"></i></div>
+                <span id="userNameDisplay" class="text-xs font-semibold text-slate-200 truncate max-w-[100px] md:max-w-[150px]">ผู้ใช้</span>
+                <div class="h-4 w-px bg-slate-500 mx-1"></div>
+                <button onclick="logoutUser()" class="text-xs text-red-400 hover:text-red-300 transition font-bold" title="ออกจากระบบ">ออก</button>
+            </div>
+            
+            <div class="h-6 w-px bg-slate-600 mx-1 hidden md:block"></div>
+
+            <!-- Wires Color -->
+            <div class="hidden lg:flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded border border-slate-600">
+                <span class="text-xs font-semibold text-slate-300">สีสาย:</span>
+                <select id="wire-color-select" class="text-sm bg-slate-600 text-white border-none rounded outline-none cursor-pointer">
+                    <option value="#ef4444">แดง (L)</option>
+                    <option value="#3b82f6">น้ำเงิน (N)</option>
+                    <option value="#8b5cf6">ม่วง (L1)</option>
+                    <option value="#10b981">เขียว (L2)</option>
+                    <option value="#f59e0b">เหลือง (L3)</option>
+                    <option value="#111111">ดำ (ทั่วไป)</option>
+                </select>
+            </div>
+            
+            <!-- Wire hint / Snap instructions -->
+            <div class="text-[10px] text-slate-300 bg-slate-900/50 px-2 py-1 rounded hidden lg:block border border-slate-700">
+                💡 ระบบลากสายไฟแบบ Snap: คลิกขั้วเริ่มต้น → คลิกที่ว่างเพื่อหักมุมได้อิสระ → คลิกขั้วปลายทางเพื่อเชื่อมต่อทันที (กด ESC เพื่อยกเลิก)
+            </div>
+
+            <!-- Tools -->
+            <div id="top-actions" class="flex items-center gap-2 hidden">
+                <button id="btn-top-delete" class="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-500/50 rounded hover:bg-red-600 hover:text-white transition text-sm flex items-center gap-1" title="ลบอุปกรณ์ (Delete)">
+                    <i class="fas fa-trash-alt"></i> ลบ
+                </button>
+            </div>
+
+            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+
+            <!-- Save / Load / Sound Toggle Files -->
+            <button id="btn-sound-toggle" onclick="SoundEngine.toggleMute()" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center justify-center w-9" title="เปิด/ปิดเสียง (Sound)">
+                <i class="fas fa-volume-up" id="icon-sound"></i>
+            </button>
+            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+            <button id="btn-save" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 rounded transition text-sm flex items-center gap-1" title="บันทึกวงจรลงไฟล์ .txt (Save)"><i class="fas fa-save"></i><span class="hidden md:inline"> Save</span></button>
+            <button id="btn-load-trigger" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-500 rounded transition text-sm flex items-center gap-1" title="เปิดไฟล์วงจร (Load)"><i class="fas fa-folder-open"></i><span class="hidden md:inline"> Load</span></button>
+            <input type="file" id="file-input" class="hidden" accept=".txt,.json">
+            
+            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+            
+            <button id="btn-undo" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center gap-1" title="ย้อนกลับ (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+            <button id="btn-reset" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center gap-1" title="เริ่มใหม่"><i class="fas fa-redo"></i></button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="flex-1 flex flex-row overflow-hidden relative">
+        
+        <!-- Explosion Overlay -->
+        <div id="explosion-overlay" class="absolute inset-0 z-[100] hidden flex-col items-center justify-center pointer-events-none">
+            <div class="text-[150px] mb-2 leading-none drop-shadow-[0_0_20px_rgba(255,255,255,0.8)]">💥</div>
+            <h1 class="text-7xl font-black text-white drop-shadow-[0_5px_10px_rgba(200,0,0,1)] uppercase tracking-wider text-center">Short Circuit!</h1>
+            <h2 id="explosion-reason" class="text-3xl font-bold text-yellow-300 drop-shadow-[0_2px_5px_rgba(0,0,0,1)] mt-6 bg-black/60 border-2 border-red-500 px-8 py-3 rounded-full"></h2>
+            <p class="text-white mt-4 font-bold bg-red-600 px-4 py-1 rounded">เบรกเกอร์ทริปอัตโนมัติ (Breaker Tripped)</p>
+        </div>
+
+        <!-- Left Menu: Component Library -->
+        <aside class="w-64 bg-white border-r border-slate-200 shadow-lg z-20 flex flex-col shrink-0 relative">
+            <div class="p-3 bg-slate-100 border-b border-slate-200 font-bold text-slate-700 text-sm flex justify-between items-center">
+                คลังอุปกรณ์ (Components)
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+                <!-- Main Breaker Box -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'mainbox')" onclick="spawnComponent('mainbox')">
+                    <div class="w-8 h-8 bg-slate-200 border border-slate-400 rounded-sm flex items-center justify-center relative">
+                        <div class="w-3 h-4 bg-slate-700 rounded-sm"></div>
+                        <div class="absolute bottom-1 w-6 h-1 bg-green-500"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700 leading-tight">ตู้เมนไฟฟ้า (MDB)<br><span class="text-[10px] text-slate-500">Breaker 3P + N + PE</span></div>
+                </div>
+
+                <!-- 3 Phase Breaker (MCCB) -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'breaker3p')" onclick="spawnComponent('breaker3p')">
+                    <div class="w-6 h-8 bg-white border border-slate-400 rounded-sm flex flex-col justify-center items-center relative">
+                        <div class="w-3 h-4 bg-slate-800 rounded-sm"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700 leading-tight">เบรกเกอร์ 3 เฟส<br><span class="text-[10px] text-slate-500">MCCB 100A</span></div>
+                </div>
+
+                <!-- Magnetic Contactor -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'contactor')" onclick="spawnComponent('contactor')">
+                    <div class="w-6 h-8 bg-[#e8e6dd] border border-slate-400 rounded-sm flex flex-col justify-between items-center py-1 relative">
+                        <div class="w-4 h-1 bg-slate-400"></div>
+                        <div class="w-3 h-3 bg-gray-800 rounded-sm"></div>
+                        <div class="w-4 h-1 bg-slate-400"></div>
+                        <div class="absolute left-0 top-3 w-1.5 h-2 bg-blue-500"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">Magnetic Contactor<br><span class="text-[10px] text-slate-500">S-N10</span></div>
+                </div>
+
+                <!-- Thermal Overload Relay -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'overload')" onclick="spawnComponent('overload')">
+                    <div class="w-6 h-8 bg-[#2f3542] border border-slate-600 rounded-sm flex flex-col justify-between items-center py-1 relative">
+                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <div class="w-3 h-3 bg-blue-500 rounded-sm"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">Overload Relay<br><span class="text-[10px] text-slate-500">TH-N12 Thermal</span></div>
+                </div>
+
+                <!-- Push Button NO -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'button_no')" onclick="spawnComponent('button_no')">
+                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded-sm flex items-center justify-center">
+                        <div class="w-4 h-4 bg-green-500 rounded-full shadow-sm"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">สวิตช์ Start (NO/NC)</div>
+                </div>
+
+                <!-- Push Button NC -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'button_nc')" onclick="spawnComponent('button_nc')">
+                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded-sm flex items-center justify-center">
+                        <div class="w-4 h-4 bg-red-500 rounded-full shadow-sm"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">สวิตช์ Stop (NO/NC)</div>
+                </div>
+
+                <!-- 3 Phase Motor -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'motor')" onclick="spawnComponent('motor')">
+                    <div class="w-8 h-8 rounded-full bg-slate-400 border border-slate-600 flex items-center justify-center text-white font-bold text-xs">M</div>
+                    <div class="text-sm font-medium text-slate-700">มอเตอร์ 3 เฟส</div>
+                </div>
+
+                <!-- Pilot Lamp -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'lamp')" onclick="spawnComponent('lamp')">
+                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded flex items-center justify-center">
+                        <div class="w-4 h-4 bg-yellow-300 rounded-full shadow-sm border border-yellow-500"></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">หลอดไฟสัญญาณ (Lamp)</div>
+                </div>
+
+                <!-- Timer Relay -->
+                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'timer')" onclick="spawnComponent('timer')">
+                    <div class="w-6 h-8 bg-slate-100 border border-slate-400 rounded-sm flex flex-col items-center py-1 gap-1">
+                        <div class="w-4 h-4 rounded-full border border-slate-400 bg-slate-200 flex items-center justify-center"><div class="w-1 h-2 bg-slate-500 rounded-sm"></div></div>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">ทามเมอร์ (Timer)<br><span class="text-[10px] text-slate-500">On-Delay Relay</span></div>
+                </div>
+
+                <div class="mt-4 p-3 bg-red-50 rounded border border-red-100 text-[11px] text-red-800 leading-relaxed">
+                    <strong>⚠️ คำเตือนความปลอดภัย:</strong><br>
+                    ระวังการต่อสายไฟช็อตถึงกัน หากมีการต่อลัดวงจร (Short Circuit) โดยไม่ผ่านโหลด เบรกเกอร์จะทริปและเกิดระเบิดทันที!
+                </div>
+            </div>
+
+            <!-- Properties Panel -->
+            <div id="properties-panel" class="hidden flex-col border-t border-slate-200 bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+                <div class="p-2 border-b bg-slate-100 font-semibold text-slate-700 flex justify-between items-center text-sm">
+                    <span>ตั้งค่าอุปกรณ์</span>
+                    <button onclick="deselectElement()" class="text-slate-400 hover:text-red-500 text-lg leading-none">&times;</button>
+                </div>
+                <div class="p-3 flex flex-col gap-2 text-sm" id="properties-content">
+                    <!-- JS Injected Properties -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center Workspace -->
+        <section id="workspace" class="flex-1 relative workspace-bg overflow-hidden cursor-grab active:cursor-grabbing">
+            <!-- Panning and Zooming Container -->
+            <div id="canvas-layer" style="transform-origin: 0 0;">
+                <!-- SVG Layer for Wires -->
+                <svg id="wire-layer"></svg>
+            </div>
+        </section>
+        
+        <!-- Status Log Overlay (Bottom Right) -->
+        <div class="absolute bottom-4 right-4 w-80 bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-xl z-50 flex flex-col max-h-[250px]">
+            <div class="px-3 py-2 bg-slate-800 text-white text-xs font-bold rounded-t-lg flex justify-between items-center">
+                <span>System Log</span>
+                <button onclick="document.getElementById('sys-log').innerHTML=''" class="text-slate-400 hover:text-white">Clear</button>
+            </div>
+            <div id="sys-log" class="p-2 overflow-y-auto text-[11px] font-mono text-slate-700 flex-1 space-y-1">
+                <!-- Logs here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Stats Bar (Floating Bottom Center) -->
+    <div id="stats-bar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-[#4c4440] text-white px-5 py-2.5 rounded-full flex items-center gap-3 sm:gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.5)] z-[100] text-[11px] sm:text-xs font-bold border border-[#5d5652] whitespace-nowrap tracking-wide">
+        <!-- Visitors -->
+        <div class="flex items-center gap-2">
+            <i class="fas fa-users text-[#5b9ee5] text-sm"></i>
+            <span class="text-slate-200">ผู้เข้าชมสะสม: <span id="stat-visitors" class="text-white text-[13px]">...</span></span>
+        </div>
+        <div class="w-[2px] h-3 bg-[#6b6460] rounded"></div>
+        <!-- Online -->
+        <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 bg-[#4ade80] rounded-full animate-pulse shadow-[0_0_8px_#4ade80]"></div>
+            <span class="text-slate-200">กำลังออนไลน์: <span id="stat-online" class="text-white text-[13px]">...</span></span>
+        </div>
+        <div class="w-[2px] h-3 bg-[#6b6460] rounded"></div>
+        <!-- Members -->
+        <div class="flex items-center gap-2">
+            <i class="fas fa-user-graduate text-[#c084fc] text-sm"></i>
+            <span class="text-slate-200">สมาชิก: <span id="stat-members" class="text-white text-[13px]">...</span></span>
+            <span id="stat-new-member" class="bg-[#8b315b] text-[#fbcfe8] text-[9px] px-1.5 py-0.5 rounded-sm ml-1 hidden transition-all duration-300">+1 ใหม่</span>
+        </div>
+    </div>
+
+    <!-- Admin Panel Overlay -->
+    <div id="adminPanelOverlay" class="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[10000] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl flex flex-col max-h-[85vh]">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fas fa-user-shield text-purple-600"></i> แผงควบคุมผู้ดูแลระบบ (Admin)
+                </h2>
+                <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-red-500 text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- PIN Login View -->
+            <div id="adminPinView" class="flex flex-col items-center justify-center py-10">
+                <p class="text-slate-600 mb-4 font-medium">กรุณาใส่รหัสผ่าน Admin เพื่อเข้าสู่ระบบ</p>
+                <input type="password" id="adminPinInput" class="w-64 px-4 py-3 bg-slate-50 border-2 border-slate-300 focus:border-purple-500 rounded-xl outline-none text-center text-xl tracking-widest font-bold" placeholder="PIN">
+                <button onclick="verifyAdminPin()" class="mt-4 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-lg">ยืนยัน</button>
+                <p id="adminPinError" class="text-red-500 text-sm mt-3 hidden font-bold">รหัสผ่านไม่ถูกต้อง!</p>
+            </div>
+
+            <!-- Dashboard View (Hidden by default) -->
+            <div id="adminDashboardView" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <p class="text-sm text-slate-500 font-medium">รายชื่อผู้ใช้งานทั้งหมด</p>
+                    <button onclick="loadAdminUsers()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded border"><i class="fas fa-sync-alt"></i> รีเฟรช</button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto border rounded-xl bg-slate-50 p-2">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-200 text-slate-600">
+                            <tr>
+                                <th class="p-2 rounded-tl-lg">ชื่อผู้ใช้ / อีเมล</th>
+                                <th class="p-2 text-center">สถานะการอนุมัติ (ใช้งานเต็มรูปแบบ)</th>
+                                <th class="p-2 text-center rounded-tr-lg">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersList" class="divide-y divide-slate-200">
+                            <!-- User rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase DB Config ---
+        const FIREBASE_DB_URL = "https://tess-71c84-default-rtdb.asia-southeast1.firebasedatabase.app";
+        let currentUser = null;
+
+        // --- SOUND ENGINE (Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        let motorOsc = null;
+        let motorGain = null;
+        let motorFilter = null;
+        let wasMotorSpinningGlobal = false;
+
+        const SoundEngine = {
+            isMuted: false,
+            init: function() {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            },
+            toggleMute: function() {
+                this.isMuted = !this.isMuted;
+                const icon = document.getElementById('icon-sound');
+                if (this.isMuted) {
+                    icon.className = 'fas fa-volume-mute text-red-400';
+                    this.stopMotor(); // Force stop motor sound if muted
+                } else {
+                    icon.className = 'fas fa-volume-up text-white';
+                }
+                sysLog(this.isMuted ? "ปิดเสียง (Sound Muted)" : "เปิดเสียง (Sound Unmuted)");
+                // Try resume context on user action
+                this.init();
+            },
+            playBreaker: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                // Click noise
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.exponentialRampToValueAtTime(10, t + 0.1);
+                gain.gain.setValueAtTime(0.8, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.1);
+            },
+            playTrip: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                // Sharp snap
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1200, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.15);
+                gain.gain.setValueAtTime(1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.15);
+            },
+            playExplosion: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const duration = 1.5;
+                const bufferSize = audioCtx.sampleRate * duration;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1; // White noise
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, t);
+                filter.frequency.exponentialRampToValueAtTime(50, t + duration); // Boom decay
+                
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(1.5, t); // Loud boom
+                gain.gain.exponentialRampToValueAtTime(0.01, t + duration);
+                
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                noise.start(t);
+            },
+            startMotor: function() {
+                if (this.isMuted) return;
+                this.init();
+                if (motorOsc) return; // Already running
+                
+                motorOsc = audioCtx.createOscillator();
+                motorGain = audioCtx.createGain();
+                motorFilter = audioCtx.createBiquadFilter();
+                
+                motorOsc.type = 'sawtooth';
+                motorOsc.frequency.value = 55; // Deep AC motor hum
+                
+                motorFilter.type = 'lowpass';
+                motorFilter.frequency.value = 400; // Muffle it to sound like hum, not buzz
+                
+                motorGain.gain.value = 0.2; // Keep it background level
+                
+                motorOsc.connect(motorFilter);
+                motorFilter.connect(motorGain);
+                motorGain.connect(audioCtx.destination);
+                
+                motorOsc.start();
+            },
+            stopMotor: function() {
+                if (motorOsc) {
+                    motorOsc.stop();
+                    motorOsc.disconnect();
+                    motorFilter.disconnect();
+                    motorGain.disconnect();
+                    motorOsc = null;
+                    motorGain = null;
+                    motorFilter = null;
+                }
+            }
+        };
+
+        // Initialize Audio context on first user click anywhere to comply with browser autoplay policies
+        document.body.addEventListener('click', () => {
+            SoundEngine.init();
+        }, { once: true });
+
+
+        // แก้ไขข้อผิดพลาด SyntaxError จาก Regular Expression เดิม
+        const sanitizeKey = (email) => email.trim().toLowerCase().replace(/[.#$\[\]\/\s]/g, '_');
+
+        function showLoginMsg(msg, isSuccess = false) {
+            const msgEl = document.getElementById('loginMsg');
+            msgEl.textContent = msg;
+            msgEl.className = `mt-4 text-center text-sm font-bold py-2 rounded-xl border ${isSuccess ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-500 bg-red-50 border-red-100'}`;
+            msgEl.classList.remove('hidden');
+        }
+
+        // Handle Login Submission
+        document.getElementById('loginFormSim').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmailSim').value;
+            const password = document.getElementById('loginPasswordSim').value;
+            const safeKey = sanitizeKey(email);
+            const btn = e.target.querySelector('button[type="submit"]');
+
+            document.getElementById('loginMsg').classList.add('hidden');
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> กำลังตรวจสอบ...`;
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${FIREBASE_DB_URL}/users/${safeKey}.json`);
+                if (!res.ok) throw new Error("Network response was not ok");
+                
+                const user = await res.json();
+
+                if (!user) {
+                    showLoginMsg("ไม่พบบัญชีผู้ใช้นี้ กรุณาสมัครที่หน้าแรกก่อน");
+                } else if (user.password !== password) {
+                    showLoginMsg("รหัสผ่านไม่ถูกต้อง");
+                } else {
+                    currentUser = user;
+                    localStorage.setItem('sim_user_session', JSON.stringify(user));
+                    initUserSession();
+                }
+            } catch (err) {
+                showLoginMsg("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+                console.error("Firebase Login Error:", err);
+            } finally {
+                btn.innerHTML = `<i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบจำลอง`;
+                btn.disabled = false;
+            }
+        });
+
+        // Handle Guest Login
+        document.getElementById('btnGuestLogin').addEventListener('click', () => {
+            currentUser = { name: "บุคคลทั่วไป (ทดลองใช้)", isGuest: true };
+            localStorage.setItem('sim_user_session', JSON.stringify(currentUser));
+            document.getElementById('loginMsg').classList.add('hidden');
+            initUserSession();
+            sysLog("⚠️ แจ้งเตือน: โหมดทดลองใช้งาน จะไม่สามารถเชื่อมสายไฟและบันทึกข้อมูลได้");
+        });
+
+        function initUserSession() {
+            const stored = localStorage.getItem('sim_user_session');
+            if (stored) {
+                currentUser = JSON.parse(stored);
+                document.getElementById('authOverlay').classList.add('hidden');
+                document.getElementById('userProfileBadge').classList.remove('hidden');
+                document.getElementById('userProfileBadge').classList.add('flex');
+                document.getElementById('userNameDisplay').textContent = currentUser.name;
+                sysLog(`เข้าสู่ระบบในชื่อ: ${currentUser.name}`);
+            } else {
+                document.getElementById('authOverlay').classList.remove('hidden');
+                document.getElementById('userProfileBadge').classList.add('hidden');
+                document.getElementById('userProfileBadge').classList.remove('flex');
+            }
+        }
+
+        window.logoutUser = () => {
+            localStorage.removeItem('sim_user_session');
+            currentUser = null;
+            document.getElementById('authOverlay').classList.remove('hidden');
+            document.getElementById('userProfileBadge').classList.add('hidden');
+            document.getElementById('userProfileBadge').classList.remove('flex');
+            document.getElementById('loginFormSim').reset();
+            
+            // Clear workspace on logout for privacy
+            wires.forEach(w => w.pathElement.remove()); wires = [];
+            document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            historyStack = [];
+            sysLog("ออกจากระบบเรียบร้อยแล้ว");
+        }
+
+        // --- State Variables ---
+        let components = {};
+        let wires = [];
+        let historyStack = [];
+        
+        // Workspace Pan/Zoom
+        const workspace = document.getElementById('workspace');
+        const canvasLayer = document.getElementById('canvas-layer');
+        const wireLayer = document.getElementById('wire-layer');
+        const colorSelect = document.getElementById('wire-color-select');
+        const sysLogEl = document.getElementById('sys-log');
+        const propertiesPanel = document.getElementById('properties-panel');
+        const propertiesContent = document.getElementById('properties-content');
+
+        let currentScale = 1;
+        let panX = 0, panY = 0;
+        let initialPanX = 0, initialPanY = 0;
+        let isPanning = false;
+        let panStartX = 0, panStartY = 0;
+
+        // Simulator Engine Variables
+        let simulationActive = false;
+        let isExploding = false;
+        
+        // Thermal Overload Simulation Tracking
+        let thermalOverloadHeat = 0; // Cumulative heat (0 to 100)
+        let thermalInterval = null;  // Loop timer for simulated heat accumulation
+        
+        function sysLog(msg) {
+            const time = new Date().toLocaleTimeString('th-TH', { hour12: false });
+            const div = document.createElement('div');
+            // Check if error log
+            if(msg.includes("💥") || msg.includes("⚠️")) div.innerHTML = `<span class="text-blue-500">[${time}]</span> <span class="text-red-600 font-bold">${msg}</span>`;
+            else div.innerHTML = `<span class="text-blue-500">[${time}]</span> ${msg}`;
+            sysLogEl.appendChild(div);
+            sysLogEl.scrollTop = sysLogEl.scrollHeight;
+        }
+
+        // --- Workspace Controls ---
+        function updateCanvasTransform() {
+            canvasLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${currentScale})`;
+            workspace.style.backgroundPosition = `${panX}px ${panY}px`;
+            workspace.style.backgroundSize = `${20 * currentScale}px ${20 * currentScale}px`;
+        }
+
+        workspace.addEventListener('wheel', (e) => {
+            if (e.target === workspace || e.target === canvasLayer || e.target.id === 'wire-layer' || e.target.closest('.draggable-item')) {
+                e.preventDefault();
+                const zoomSensitivity = 0.002;
+                const delta = e.deltaY * -zoomSensitivity;
+                const newScale = Math.min(Math.max(0.4, currentScale + delta), 2.5);
+                
+                const rect = workspace.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                panX = mouseX - (mouseX - panX) * (newScale / currentScale);
+                panY = mouseY - (mouseY - panY) * (newScale / currentScale);
+                
+                currentScale = newScale;
+                initialPanX = panX;
+                initialPanY = panY;
+                updateCanvasTransform();
+            }
+        }, { passive: false });
+
+        workspace.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; 
+            // Prevent panning if clicking interactive parts or actively wiring
+            if (isWiring || e.target.closest('.btn-head') || e.target.closest('.breaker-switch') || e.target.closest('.breaker3p-handle') || e.target.closest('.overload-trip-btn') || e.target.closest('.overload-reset-btn') || e.target.tagName === 'INPUT' || e.target.closest('button')) return; 
+            
+            if (e.target === workspace || e.target === canvasLayer || e.target.id === 'wire-layer') {
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                deselectElement();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX = initialPanX + (e.clientX - panStartX);
+                panY = initialPanY + (e.clientY - panStartY);
+                updateCanvasTransform();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isPanning) {
+                isPanning = false;
+                initialPanX = panX;
+                initialPanY = panY;
+            }
+        });
+
+        // --- Drag & Drop from Menu ---
+        function menuDragStart(e, type) {
+            e.dataTransfer.setData('text/plain', type);
+            e.dataTransfer.effectAllowed = 'copy';
+        }
+        workspace.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            if (type) {
+                const canvasRect = canvasLayer.getBoundingClientRect();
+                const dropX = (e.clientX - canvasRect.left) / currentScale;
+                const dropY = (e.clientY - canvasRect.top) / currentScale;
+                spawnComponent(type, dropX - 40, dropY - 40);
+            }
+        });
+
+        // --- Component Generation ---
+        function getComponentHTML(type, compId) {
+            if (type === 'mainbox') {
+                return `
+                    <div class="comp-mainbox" data-breaker="off">
+                        <div class="absolute top-4 left-6 text-xl font-bold text-slate-700">MDB (Main Breaker Box)</div>
+                        <div class="box-warning">⚡</div>
+                        
+                        <!-- Breaker Switch -->
+                        <div class="breaker-switch" title="คลิกเพื่อสับเบรกเกอร์ (ON/OFF)">
+                            <div class="breaker-handle"></div>
+                            <span class="absolute -left-12 text-base font-bold text-slate-500">ON</span>
+                            <span class="absolute -left-14 bottom-2 text-base font-bold text-slate-500">OFF</span>
+                        </div>
+                        
+                        <div class="absolute top-[170px] left-[40px] w-[180px] flex justify-between px-1 text-base font-bold text-slate-500">
+                            <span>L1</span><span>L2</span><span>L3</span>
+                        </div>
+
+                        <!-- Phase Terminals (Output of breaker) -->
+                        <div class="absolute top-[195px] left-[40px] w-[180px] flex justify-between">
+                            <div class="terminal terminal-lg" id="term-${compId}-L1" style="position:relative; background:#8b5cf6;" title="L1 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L2" style="position:relative; background:#10b981;" title="L2 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L3" style="position:relative; background:#f59e0b;" title="L3 Out"></div>
+                        </div>
+
+                        <!-- Neutral Busbar -->
+                        <div class="busbar neutral flex justify-around items-center px-8">
+                            <span class="absolute -left-10 text-xl font-bold text-blue-700">N</span>
+                            <div class="terminal terminal-md" id="term-${compId}-N1" style="position:static; background:#3b82f6;" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N2" style="position:static; background:#3b82f6;" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N3" style="position:static; background:#3b82f6;" title="Neutral"></div>
+                        </div>
+
+                        <!-- Ground Busbar -->
+                        <div class="busbar ground flex justify-around items-center px-8">
+                            <span class="absolute -left-12 text-xl font-bold text-green-700">PE</span>
+                            <div class="terminal terminal-md" id="term-${compId}-PE1" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE2" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE3" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
+                        </div>
+                    </div>`;
+            } 
+            else if (type === 'breaker3p') {
+                return `
+                    <div class="comp-breaker3p off" data-state="off">
+                        <div class="absolute top-1 text-[8px] font-bold text-slate-400 w-full text-center">MCCB</div>
+                        
+                        <!-- Screws Top -->
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="L1 In"></div>
+                        
+                        <div class="terminal-plate" style="left: 54px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 56px; top: 17px;" title="L2 In"></div>
+                        
+                        <div class="terminal-plate" style="left: 93px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 95px; top: 17px;" title="L3 In"></div>
+
+                        <!-- Middle Area -->
+                        <div style="position: absolute; top: 60px; left: 10px; right: 10px; height: 70px; background: #f1f5f9; border: 1px solid #cbd5e1; display:flex; align-items:center; justify-content:space-between; padding: 0 5px;">
+                            <div style="font-size: 18px; font-weight: 900; color: #94a3b8; font-family: sans-serif;">100<span style="font-size:10px;">A</span></div>
+                        </div>
+
+                        <!-- Switch -->
+                        <div class="breaker3p-switch-container">
+                            <div class="breaker3p-bg-on">ON</div>
+                            <div class="breaker3p-handle" title="คลิกเพื่อสับเบรกเกอร์"></div>
+                            <div class="breaker3p-bg-off">OFF</div>
+                        </div>
+
+                        <!-- Screws Bottom -->
+                        <div class="terminal-plate" style="left: 15px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 155px;" title="T1 Out"></div>
+                        
+                        <div class="terminal-plate" style="left: 54px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 56px; top: 155px;" title="T2 Out"></div>
+                        
+                        <div class="terminal-plate" style="left: 93px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 95px; top: 155px;" title="T3 Out"></div>
+                    </div>`;
+            }
+            else if (type === 'contactor') {
+                return `
+                    <div class="comp-contactor shadow-md">
+                        <div class="sn10-core-bg"></div>
+                        <div class="contactor-core">
+                            <div class="core-hole"></div>
+                            <div class="core-hole"></div>
+                        </div>
+                        <div class="sn10-label">S-N10</div>
+                        <div class="absolute" style="right: 15px; top: 112px; font-size: 8px; font-weight: bold; color: #333; z-index: 3;">18.5S<br>Ith=20A</div>
+                        
+                        <!-- Row 1 (Top: Main + NO) -->
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="Main 1/L1"></div>
+                        <div class="sn10-text" style="left: 11px; top: 40px;">1/L1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 52px; top: 17px;" title="Main 3/L2"></div>
+                        <div class="sn10-text" style="left: 46px; top: 40px;">3/L2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 87px; top: 17px;" title="Main 5/L3"></div>
+                        <div class="sn10-text" style="left: 81px; top: 40px;">5/L3</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-13" style="left: 122px; top: 17px;" title="Aux 13 NO"></div>
+                        <div class="sn10-text" style="left: 116px; top: 40px;">13 NO</div>
+
+                        <!-- Row 2 (Upper Mid: Coil A1 & Aux NC) -->
+                        <div class="terminal-plate" style="left: 15px; top: 60px;"></div>
+                        <div class="terminal" id="term-${compId}-A1" style="left: 17px; top: 62px;" title="Coil A1"></div>
+                        <div class="sn10-text black" style="left: 11px; top: 85px;">A1</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 60px;"></div>
+                        <div class="terminal" id="term-${compId}-21" style="left: 122px; top: 62px;" title="Aux 21 NC"></div>
+                        <div class="sn10-text black" style="left: 116px; top: 85px;">21 NC</div>
+
+                        <!-- Row 3 (Lower Mid: Coil A2 & Aux NC) -->
+                        <div class="terminal-plate" style="left: 15px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-A2" style="left: 17px; top: 147px;" title="Coil A2"></div>
+                        <div class="sn10-text black" style="left: 11px; top: 133px;">A2</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-22" style="left: 122px; top: 147px;" title="Aux 22 NC"></div>
+                        <div class="sn10-text black" style="left: 116px; top: 133px;">22 NC</div>
+
+                        <!-- Row 4 (Bottom: Main + NO) -->
+                        <div class="terminal-plate" style="left: 15px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 192px;" title="Main 2/T1"></div>
+                        <div class="sn10-text" style="left: 11px; top: 178px;">2/T1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 52px; top: 192px;" title="Main 4/T2"></div>
+                        <div class="sn10-text" style="left: 46px; top: 178px;">4/T2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 87px; top: 192px;" title="Main 6/T3"></div>
+                        <div class="sn10-text" style="left: 81px; top: 178px;">6/T3</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-14" style="left: 122px; top: 192px;" title="Aux 14 NO"></div>
+                        <div class="sn10-text" style="left: 116px; top: 178px;">14 NO</div>
+                    </div>`;
+            }
+            else if (type === 'overload') {
+                return `
+                    <div class="comp-overload shadow-md" data-tripped="false">
+                        <div class="overload-label" style="top: 110px;">TH-N12</div>
+                        <div class="overload-dial" title="ปรับตั้งพิกัดกระแส (Amps)"></div>
+                        <button class="overload-trip-btn" title="คลิกเพื่อจำลองทริป (Test Trip)">TRIP</button>
+                        <button class="overload-reset-btn" title="คลิกเพื่อรีเซ็ตโอเวอร์โหลด">R</button>
+
+                        <!-- Thermal Heat Bar Indicator Graphic -->
+                        <div class="thermal-bar-container" title="ความร้อนสะสมโอเวอร์โหลด (Overload Heat Accumulation)">
+                            <div class="thermal-bar" id="heat-bar-${compId}"></div>
+                        </div>
+
+                        <div class="ov-info absolute" style="left: 12px; top: 135px; font-size: 8px; font-weight: bold; color: #94a3b8; line-height:1.2;">
+                            RC: 9 A<br>95-96: NC<br>97-98: NO
+                        </div>
+
+                        <!-- Row 1 (Power Pins In - top of overload which attaches to contactor T1-T3) -->
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="Overload 1/L1 (In)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 4px; color:#fff;">1/L1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 52px; top: 17px;" title="Overload 3/L2 (In)"></div>
+                        <div class="sn10-text" style="left: 46px; top: 4px; color:#fff;">3/L2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 87px; top: 17px;" title="Overload 5/L3 (In)"></div>
+                        <div class="sn10-text" style="left: 81px; top: 4px; color:#fff;">5/L3</div>
+
+                        <!-- Auxiliary Contacts NO (97, 98) & NC (95, 96) in the middle -->
+                        <div class="terminal-plate" style="left: 120px; top: 48px;"></div>
+                        <div class="terminal" id="term-${compId}-95" style="left: 122px; top: 50px;" title="Aux 95 NC"></div>
+                        <div class="sn10-text" style="left: 114px; top: 38px; color:#ef4444; font-size:8px;">95 NC</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 82px;"></div>
+                        <div class="terminal" id="term-${compId}-96" style="left: 122px; top: 84px;" title="Aux 96 NC"></div>
+                        <div class="sn10-text" style="left: 114px; top: 72px; color:#ef4444; font-size:8px;">96 NC</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 115px;"></div>
+                        <div class="terminal" id="term-${compId}-97" style="left: 122px; top: 117px;" title="Aux 97 NO"></div>
+                        <div class="sn10-text" style="left: 114px; top: 105px; color:#10b981; font-size:8px;">97 NO</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 148px;"></div>
+                        <div class="terminal" id="term-${compId}-98" style="left: 122px; top: 150px;" title="Aux 98 NO"></div>
+                        <div class="sn10-text" style="left: 114px; top: 138px; color:#10b981; font-size:8px;">98 NO</div>
+
+                        <!-- Row 2 (Power Pins Out - bottom to Motor) -->
+                        <div class="terminal-plate" style="left: 15px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 157px;" title="Overload 2/T1 (Out)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 143px; color:#fff;">2/T1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 52px; top: 157px;" title="Overload 4/T2 (Out)"></div>
+                        <div class="sn10-text" style="left: 46px; top: 143px; color:#fff;">4/T2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 87px; top: 157px;" title="Overload 6/T3 (Out)"></div>
+                        <div class="sn10-text" style="left: 81px; top: 143px; color:#fff;">6/T3</div>
+                    </div>`;
+            }
+            else if (type === 'button_no') {
+                return `
+                    <div class="comp-button shadow-md">
+                        <div class="absolute top-[32px] text-[10px] font-bold text-slate-500">START</div>
+                        <div class="btn-head btn-green"></div>
+                        
+                        <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
+                        <div class="terminal-label text-red-500" style="left: 14px; top: 26px; font-size:8px;">1</div>
+                        <div class="terminal" id="term-${compId}-2" style="right: 10px; top: 10px;" title="NC (2)"></div>
+                        <div class="terminal-label text-red-500" style="right: 14px; top: 26px; font-size:8px;">2</div>
+
+                        <div class="terminal" id="term-${compId}-3" style="left: 10px; bottom: 10px;" title="NO (3)"></div>
+                        <div class="terminal-label text-green-600" style="left: 14px; bottom: 26px; font-size:8px;">3</div>
+                        <div class="terminal" id="term-${compId}-4" style="right: 10px; bottom: 10px;" title="NO (4)"></div>
+                        <div class="terminal-label text-green-600" style="right: 14px; bottom: 26px; font-size:8px;">4</div>
+                    </div>`;
+            }
+            else if (type === 'button_nc') {
+                return `
+                    <div class="comp-button shadow-md">
+                        <div class="absolute top-[32px] text-[10px] font-bold text-slate-500">STOP</div>
+                        <div class="btn-head btn-red"></div>
+                        
+                        <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
+                        <div class="terminal-label text-red-500" style="left: 14px; top: 26px; font-size:8px;">1</div>
+                        <div class="terminal" id="term-${compId}-2" style="right: 10px; top: 10px;" title="NC (2)"></div>
+                        <div class="terminal-label text-red-500" style="right: 14px; top: 26px; font-size:8px;">2</div>
+
+                        <div class="terminal" id="term-${compId}-3" style="left: 10px; bottom: 10px;" title="NO (3)"></div>
+                        <div class="terminal-label text-green-600" style="left: 14px; bottom: 26px; font-size:8px;">3</div>
+                        <div class="terminal" id="term-${compId}-4" style="right: 10px; bottom: 10px;" title="NO (4)"></div>
+                        <div class="terminal-label text-green-600" style="right: 14px; bottom: 26px; font-size:8px;">4</div>
+                    </div>`;
+            }
+            else if (type === 'lamp') {
+                return `
+                    <div class="comp-lamp shadow-md" data-color="green">
+                        <div class="lamp-bulb color-green"></div>
+                        <div class="terminal" id="term-${compId}-x1" style="left: 5px; bottom: 10px;" title="X1"></div><div class="terminal-label" style="left: 6px; bottom: -6px; font-size:8px;">X1</div>
+                        <div class="terminal" id="term-${compId}-x2" style="right: 5px; bottom: 10px;" title="X2"></div><div class="terminal-label" style="right: 6px; bottom: -6px; font-size:8px;">X2</div>
+                    </div>`;
+            }
+            else if (type === 'motor') {
+                return `
+                    <div class="comp-motor" data-load="60">
+                        <!-- Updated 6-Terminal Box + PE -->
+                        <div style="width: 110px; height: 60px; background: #64748b; border: 2px solid #334155; border-radius: 4px 4px 0 0; position: relative; margin-bottom: -10px; z-index: 4; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 4px 8px;">
+                            <!-- Top Row -->
+                            <div class="flex justify-between w-full">
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">W2</span><div class="terminal" id="term-${compId}-W2" style="position:relative;" title="W2"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">U2</span><div class="terminal" id="term-${compId}-U2" style="position:relative;" title="U2"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">V2</span><div class="terminal" id="term-${compId}-V2" style="position:relative;" title="V2"></div></div>
+                            </div>
+                            <!-- Bottom Row -->
+                            <div class="flex justify-between w-full">
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-U1" style="position:relative;" title="U1"></div><span class="text-[8px] text-white mt-0.5">U1</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-V1" style="position:relative;" title="V1"></div><span class="text-[8px] text-white mt-0.5">V1</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-W1" style="position:relative;" title="W1"></div><span class="text-[8px] text-white mt-0.5">W1</span></div>
+                            </div>
+                            <!-- PE Terminal -->
+                            <div class="absolute -right-7 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                                <div class="terminal" id="term-${compId}-PE" style="position:relative; background:#22c55e;" title="PE (Ground)"></div>
+                                <span class="text-[8px] text-green-400 font-bold mt-0.5">PE</span>
+                            </div>
+                        </div>
+                        <div class="motor-body">
+                            <div class="motor-rotor"></div>
+                            <div class="motor-label">M<span class="text-sm align-super">3~</span></div>
+                        </div>
+                        <div class="motor-load-gauge" id="gauge-${compId}">
+                            Load: 60% | I: 0.0A
+                        </div>
+                        <div class="absolute bottom-[-16px] bg-slate-800 text-white text-[9px] px-1.5 rounded-full hidden speed-indicator">STOP</div>
+                    </div>`;
+            }
+            else if (type === 'timer') {
+                return `
+                    <div class="comp-timer shadow-md" data-tripped="false" data-energized="false">
+                        <div class="absolute top-2 left-2 text-[10px] font-bold text-slate-700">TIMER (On-Delay)</div>
+                        <div class="absolute top-2 right-2 flex gap-2">
+                            <div class="flex flex-col items-center"><div class="timer-led led-pw"></div><span class="text-[8px] font-bold text-slate-500 mt-0.5">PW</span></div>
+                            <div class="flex flex-col items-center"><div class="timer-led led-up"></div><span class="text-[8px] font-bold text-slate-500 mt-0.5">UP</span></div>
+                        </div>
+                        
+                        <div class="timer-dial-bg" title="ตั้งเวลา (ปรับที่เมนูตั้งค่าด้านซ้าย)">
+                            <div class="timer-dial-knob" style="transform: rotate(0deg);"></div>
+                        </div>
+                        <div class="absolute top-[125px] w-full text-center text-[10px] font-bold text-slate-600 time-display">5 sec</div>
+
+                        <!-- Terminals -->
+                        <div class="terminal-plate" style="left: 15px; top: 25px;"></div>
+                        <div class="terminal" id="term-${compId}-A1" style="left: 17px; top: 27px;" title="Coil A1 (L)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 12px;">A1</div>
+
+                        <div class="terminal-plate" style="left: 103px; top: 25px;"></div>
+                        <div class="terminal" id="term-${compId}-A2" style="left: 105px; top: 27px;" title="Coil A2 (N)"></div>
+                        <div class="sn10-text" style="left: 99px; top: 12px;">A2</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-15" style="left: 17px; top: 147px;" title="Common (15)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 133px;">15</div>
+
+                        <div class="terminal-plate" style="left: 59px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-16" style="left: 61px; top: 147px;" title="NC (16)"></div>
+                        <div class="sn10-text" style="left: 55px; top: 133px;">16</div>
+
+                        <div class="terminal-plate" style="left: 103px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-18" style="left: 105px; top: 147px;" title="NO (18)"></div>
+                        <div class="sn10-text" style="left: 99px; top: 133px;">18</div>
+                    </div>`;
+            }
+        }
+
+        function saveState() {
+            const state = {
+                components: Array.from(document.querySelectorAll('.draggable-item')).map(el => ({
+                    id: el.id, type: el.dataset.type, left: el.style.left, top: el.style.top,
+                    breaker: el.querySelector('.comp-mainbox') ? el.dataset.breaker : null,
+                    breaker3p: el.querySelector('.comp-breaker3p') ? el.querySelector('.comp-breaker3p').dataset.state : null,
+                    color: el.querySelector('.comp-lamp') ? el.querySelector('.comp-lamp').dataset.color : null,
+                    tripped: el.querySelector('.comp-overload') ? el.querySelector('.comp-overload').dataset.tripped : null,
+                    ampLimit: el.querySelector('.comp-overload') ? (el.dataset.ampLimit || "9") : null,
+                    load: el.dataset.type === 'motor' ? (el.dataset.load || "60") : null,
+                    delay: el.dataset.type === 'timer' ? (el.dataset.delay || "5") : null
+                })),
+                wires: wires.map(w => ({ 
+                    id: w.id, start: w.startId, end: w.endId, color: w.pathElement.style.stroke, 
+                    waypoints: w.waypoints || [] 
+                }))
+            };
+            historyStack.push(state);
+            if (historyStack.length > 30) historyStack.shift();
+        }
+
+        function undo() {
+            if (historyStack.length === 0) return;
+            const state = historyStack.pop();
+            
+            // Clear current
+            wires.forEach(w => w.pathElement.remove()); wires = [];
+            document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            deselectElement();
+
+            // Restore
+            state.components.forEach(c => spawnComponent(c.type, parseFloat(c.left), parseFloat(c.top), c));
+            state.wires.forEach(w => {
+                const sEl = document.getElementById(w.start);
+                const eEl = document.getElementById(w.end);
+                if (sEl && eEl) addWireDirect(w.id, w.start, w.end, w.color, null, w.waypoints);
+            });
+            triggerEvaluation();
+            sysLog("Undo successful.");
+        }
+
+        function spawnComponent(type, x, y, restoreData = null) {
+            if (!restoreData) saveState();
+            
+            const el = document.createElement('div');
+            el.classList.add('draggable-item');
+            const compId = restoreData ? restoreData.id : 'C' + Date.now();
+            el.id = compId;
+            el.dataset.type = type;
+            
+            el.innerHTML = getComponentHTML(type, compId);
+            
+            if (restoreData) {
+                el.style.left = restoreData.left; el.style.top = restoreData.top;
+                if (type === 'lamp' && restoreData.color) {
+                    const lamp = el.querySelector('.comp-lamp');
+                    lamp.dataset.color = restoreData.color;
+                    lamp.querySelector('.lamp-bulb').className = `lamp-bulb color-${restoreData.color}`;
+                }
+                if (type === 'mainbox' && restoreData.breaker === "on") {
+                    el.dataset.breaker = "on";
+                    el.querySelector('.comp-mainbox').classList.add('on');
+                }
+                if (type === 'breaker3p' && restoreData.breaker3p === "on") {
+                    const box = el.querySelector('.comp-breaker3p');
+                    box.classList.remove('off');
+                    box.classList.add('on');
+                    box.dataset.state = "on";
+                }
+                if (type === 'overload') {
+                    el.dataset.ampLimit = restoreData.ampLimit || "9";
+                    const ov = el.querySelector('.comp-overload');
+                    if (restoreData.tripped === "true") {
+                        ov.dataset.tripped = "true";
+                        ov.classList.add('tripped');
+                    }
+                }
+                if (type === 'motor') {
+                    el.dataset.load = restoreData.load || "60";
+                    const gauge = el.querySelector('.motor-load-gauge');
+                    if (gauge) {
+                        gauge.textContent = `Load: ${el.dataset.load}% | I: 0.0A`;
+                    }
+                }
+                if (type === 'timer') {
+                    el.dataset.delay = restoreData.delay || "5";
+                    el.dataset.energized = "false";
+                    el.dataset.tripped = "false";
+                    el.querySelector('.time-display').textContent = el.dataset.delay + " sec";
+                    const maxRotation = 300;
+                    const rotation = (parseFloat(el.dataset.delay) / 30) * maxRotation - (maxRotation / 2);
+                    el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                }
+            } else {
+                el.style.left = (x !== undefined ? x : 100) + 'px';
+                el.style.top = (y !== undefined ? y : 100) + 'px';
+                if (type === 'overload') {
+                    el.dataset.ampLimit = "9";
+                }
+                if (type === 'motor') {
+                    el.dataset.load = "60";
+                }
+                if (type === 'timer') {
+                    el.dataset.delay = "5";
+                    const maxRotation = 300;
+                    const rotation = (5 / 30) * maxRotation - (maxRotation / 2);
+                    el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                }
+            }
+
+            // --- Component Interaction Logic ---
+            if (type === 'mainbox') {
+                const sw = el.querySelector('.breaker-switch');
+                const box = el.querySelector('.comp-mainbox');
+                sw.addEventListener('mousedown', (e) => {
+                    e.stopPropagation(); // prevent drag
+                    const isOn = box.classList.contains('on');
+                    if (isOn) {
+                        box.classList.remove('on');
+                        el.dataset.breaker = "off";
+                        sysLog("ปิดเมนเบรกเกอร์ (Main Breaker OFF)");
+                        SoundEngine.playBreaker(); // เล่นเสียงเบรกเกอร์
+                    } else {
+                        box.classList.add('on');
+                        el.dataset.breaker = "on";
+                        sysLog("เปิดเมนเบรกเกอร์ (Main Breaker ON)");
+                        SoundEngine.playBreaker(); // เล่นเสียงเบรกเกอร์
+                    }
+                    triggerEvaluation();
+                });
+            }
+            else if (type === 'breaker3p') {
+                const handle = el.querySelector('.breaker3p-handle');
+                const box = el.querySelector('.comp-breaker3p');
+                handle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation(); // prevent drag
+                    const isOff = box.classList.contains('off');
+                    if (isOff) {
+                        box.classList.remove('off');
+                        box.classList.add('on');
+                        box.dataset.state = "on";
+                        sysLog("เปิดเบรกเกอร์ (MCCB ON)");
+                        SoundEngine.playBreaker(); // เล่นเสียงเบรกเกอร์
+                    } else {
+                        box.classList.remove('on');
+                        box.classList.add('off');
+                        box.dataset.state = "off";
+                        sysLog("ปิดเบรกเกอร์ (MCCB OFF)");
+                        SoundEngine.playBreaker(); // เล่นเสียงเบรกเกอร์
+                    }
+                    triggerEvaluation();
+                });
+            }
+            else if (type === 'overload') {
+                const ov = el.querySelector('.comp-overload');
+                const tBtn = el.querySelector('.overload-trip-btn');
+                const rBtn = el.querySelector('.overload-reset-btn');
+                
+                tBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    if (ov.dataset.tripped !== "true") {
+                        ov.dataset.tripped = "true";
+                        ov.classList.add('tripped');
+                        sysLog("⚠️ โอเวอร์โหลดทริป! (Test Trip Activated)");
+                        SoundEngine.playTrip(); // เล่นเสียงทริป
+                        triggerEvaluation();
+                    }
+                });
+
+                rBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    if (ov.dataset.tripped === "true") {
+                        ov.dataset.tripped = "false";
+                        ov.classList.remove('tripped');
+                        sysLog("🔄 รีเซ็ตโอเวอร์โหลดเรียบร้อย (Overload Reset)");
+                        // Reset thermal heat accumulation when physically resetting the device
+                        thermalOverloadHeat = 0;
+                        const hb = document.getElementById(`heat-bar-${compId}`);
+                        if (hb) hb.style.width = '0%';
+                        triggerEvaluation();
+                    }
+                });
+            }
+            else if (type.startsWith('button')) {
+                const head = el.querySelector('.btn-head');
+                const btnContainer = el.querySelector('.comp-button');
+                
+                const pressBtn = (e) => {
+                    if (e) e.stopPropagation();
+                    btnContainer.classList.add('pressed');
+                    el.dataset.pressed = "true";
+                    triggerEvaluation();
+                };
+                const releaseBtn = () => {
+                    if (el.dataset.pressed === "true") {
+                        btnContainer.classList.remove('pressed');
+                        el.dataset.pressed = "false";
+                        triggerEvaluation();
+                    }
+                };
+                head.addEventListener('mousedown', pressBtn);
+                head.addEventListener('mouseup', releaseBtn);
+                head.addEventListener('mouseleave', releaseBtn);
+            }
+
+            el.addEventListener('mousedown', startDrag);
+            canvasLayer.appendChild(el);
+            
+            if (!restoreData) sysLog(`เพิ่มอุปกรณ์: ${type}`);
+            triggerEvaluation();
+        }
+
+        // --- Wiring System with Snap Capabilities ---
+        let isWiring = false;
+        let activeWire = null;
+        let startTerminalId = null;
+        let currentWaypoints = []; // เก็บจุดพักสาย (Waypoints)
+
+        function getTerminalPos(id) {
+            const el = document.getElementById(id);
+            if(!el) return {x:0, y:0};
+            const rect = el.getBoundingClientRect();
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            return {
+                x: (rect.left - canvasRect.left + rect.width / 2) / currentScale,
+                y: (rect.top - canvasRect.top + rect.height / 2) / currentScale
+            };
+        }
+
+        function getMouseCoords(e) {
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            return {
+                x: (e.clientX - canvasRect.left) / currentScale,
+                y: (e.clientY - canvasRect.top) / currentScale
+            };
+        }
+
+        function createSVGPath() {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.classList.add('wire-path');
+            path.style.stroke = colorSelect.value;
+            path.addEventListener('contextmenu', (e) => { e.preventDefault(); deleteWire(path.dataset.wireId); });
+            path.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && !isWiring) { e.stopPropagation(); selectElement(path, true); }
+            });
+            return path;
+        }
+
+        function drawOrthogonalPath(start, end) {
+            const dx = Math.abs(end.x - start.x);
+            const dy = Math.abs(end.y - start.y);
+            if (dy > dx) {
+                const midY = (start.y + end.y) / 2;
+                return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+            } else {
+                const midX = (start.x + end.x) / 2;
+                return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+            }
+        }
+
+        function generateMultiSegmentOrthogonalPath(startPos, waypoints, endPos) {
+            let pts = [startPos, ...waypoints, endPos];
+            let d = '';
+            for (let i = 0; i < pts.length - 1; i++) {
+                let segment = drawOrthogonalPath(pts[i], pts[i+1]);
+                if (i > 0) {
+                    segment = segment.replace(/^M\s*[-\d.]+\s*[-\d.]+\s*/, '');
+                    d += ' ' + segment;
+                } else {
+                    d += segment;
+                }
+            }
+            return d;
+        }
+
+        function cancelWiring() {
+            if (activeWire) activeWire.remove();
+            isWiring = false;
+            activeWire = null;
+            startTerminalId = null;
+            currentWaypoints = [];
+            // ลบสถานะ Hilight ของขั้วต่อทั้งหมด
+            document.querySelectorAll('.terminal').forEach(t => t.classList.remove('snap-candidate'));
+        }
+
+        document.addEventListener('contextmenu', (e) => {
+            if (isWiring) { e.preventDefault(); cancelWiring(); }
+        });
+
+        // ค้นหาขั้วเชื่อมต่อที่อยู่ใกล้ตำแหน่งเมาส์ในระยะที่เหมาะสม (Snap Detector)
+        function findNearbyTerminal(e, maxDistance = 30) {
+            const mouseCoords = getMouseCoords(e);
+            let closestTerminal = null;
+            let minDistance = maxDistance;
+
+            document.querySelectorAll('.terminal').forEach(t => {
+                const pos = getTerminalPos(t.id);
+                const dx = pos.x - mouseCoords.x;
+                const dy = pos.y - mouseCoords.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestTerminal = t;
+                }
+            });
+            return closestTerminal;
+        }
+
+        document.addEventListener('mousedown', (e) => {
+            if (e.button !== 0 && e.button !== 2) return;
+            if (e.button === 2) { 
+                if (isWiring) { e.preventDefault(); cancelWiring(); }
+                return;
+            }
+
+            // ตรวจจับว่าคลิกถูกขั้วต่อ หรือมีขั้วที่ใกล้เคียงพร้อมทำ Snap หรือไม่
+            const terminal = e.target.closest('.terminal') || findNearbyTerminal(e, 25);
+
+            if (terminal) {
+                e.stopPropagation();
+                if (!isWiring) {
+                    // --- ตรวจสอบสิทธิ์การใช้งาน (Auth Checks) ---
+                    // 1. โหมด Guest
+                    if (currentUser && currentUser.isGuest) {
+                        sysLog("⚠️ โหมดทดลองใช้: ไม่สามารถลากสายไฟเชื่อมต่อได้ กรุณาเข้าสู่ระบบ");
+                        alert("คุณกำลังใช้งานโหมดทดลอง (อ่านเท่านั้น) ไม่สามารถลากสายไฟได้ครับ");
+                        return;
+                    }
+
+                    // 2. สิทธิ์ Admin (canSaveLoad)
+                    if (currentUser && !currentUser.isGuest && !currentUser.canSaveLoad) {
+                        sysLog("❌ ไม่อนุญาตให้ลากสายไฟ: บัญชีของคุณยังไม่ได้รับการอนุมัติจาก Admin");
+                        alert("คุณยังไม่ได้รับสิทธิ์ให้ใช้งานการเชื่อมต่อสายไฟ กรุณาติดต่อ Admin เพื่ออนุมัติสิทธิ์ครับ");
+                        return;
+                    }
+
+                    // เริ่มต้นลากสายไฟจากขั้วต่อ
+                    isWiring = true;
+                    startTerminalId = terminal.id;
+                    currentWaypoints = [];
+                    activeWire = createSVGPath();
+                    activeWire.style.pointerEvents = 'none';
+                    wireLayer.appendChild(activeWire);
+                    updateActiveWirePreview(getTerminalPos(startTerminalId));
+                    sysLog(`เริ่มต้นต่อสายไฟจากขั้ว: ${terminal.id.replace('term-', '')}`);
+                } else {
+                    // สิ้นสุดการเชื่อมต่อโดยนำไปคลิก Snap เข้ากับขั้วปลายทาง
+                    if (terminal.id !== startTerminalId) {
+                        activeWire.style.pointerEvents = 'auto';
+                        saveState();
+                        // ปลดสายไฟสำเร็จออกจากตัวแปร activeWire ก่อนเรียกใช้ cancelWiring เพื่อไม่ให้สายไฟถูกลบหายไป
+                        const finishedWire = activeWire;
+                        activeWire = null; 
+                        addWireDirect('W' + Date.now(), startTerminalId, terminal.id, finishedWire.style.stroke, finishedWire, [...currentWaypoints]);
+                        cancelWiring();
+                    } else {
+                        // คลิกซ้ำขั้วเดิมเพื่อยกเลิกการเดินสาย
+                        cancelWiring();
+                    }
+                }
+                return;
+            }
+
+            // ถ้ากำลังเดินสายอยู่และคลิกพื้นที่ว่าง จะเพิ่มจุดหักมุม (Waypoint)
+            if (isWiring) {
+                e.stopPropagation();
+                const pos = getMouseCoords(e);
+                currentWaypoints.push(pos);
+                updateActiveWirePreview(pos);
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            // ป้องกันให้การแพนหน้าจอยังคงทำงานได้ปกติ
+            if (isPanning) {
+                panX = initialPanX + (e.clientX - panStartX);
+                panY = initialPanY + (e.clientY - panStartY);
+                updateCanvasTransform();
+                return;
+            }
+
+            if (!isWiring || !activeWire) return;
+            
+            // ตรวจสอบหาระยะทางขั้วเพื่อทำการวาด Snap Preview แบบเรียลไทม์
+            const nearbyTerminal = findNearbyTerminal(e, 25);
+            document.querySelectorAll('.terminal').forEach(t => t.classList.remove('snap-candidate'));
+            
+            if (nearbyTerminal && nearbyTerminal.id !== startTerminalId) {
+                // ถ้าเจอขั้วใกล้ๆ ให้ไฮไลท์ขั้วนั้นและบังคับจุดจบพาดผ่านศูนย์กลางขั้วต่อทันที
+                nearbyTerminal.classList.add('snap-candidate');
+                updateActiveWirePreview(getTerminalPos(nearbyTerminal.id));
+            } else {
+                // หากอยู่นอกระยะ ให้วาดตามปลายพิกัดของเมาส์ปกติ
+                updateActiveWirePreview(getMouseCoords(e));
+            }
+        });
+
+        // ซัพพอร์ตการใช้งานลากแล้วปล่อย (Drag and Drop Completion)
+        document.addEventListener('mouseup', (e) => {
+            // จัดการการหยุดแพนหน้าจอ
+            if (isPanning) {
+                isPanning = false;
+                initialPanX = panX;
+                initialPanY = panY;
+                return;
+            }
+
+            if (e.button !== 0 || !isWiring) return;
+            const terminal = e.target.closest('.terminal') || findNearbyTerminal(e, 25);
+            if (terminal && terminal.id !== startTerminalId) {
+                e.stopPropagation();
+                activeWire.style.pointerEvents = 'auto';
+                saveState();
+                // ปลดสายไฟสำเร็จออกจากตัวแปร activeWire ก่อนเรียกใช้ cancelWiring เพื่อไม่ให้สายไฟถูกลบหายไป
+                const finishedWire = activeWire;
+                activeWire = null;
+                addWireDirect('W' + Date.now(), startTerminalId, terminal.id, finishedWire.style.stroke, finishedWire, [...currentWaypoints]);
+                cancelWiring();
+            }
+        });
+
+        function updateActiveWirePreview(currentPos) {
+            if (!startTerminalId) return;
+            const startPos = getTerminalPos(startTerminalId);
+            activeWire.setAttribute('d', generateMultiSegmentOrthogonalPath(startPos, currentWaypoints, currentPos));
+        }
+
+        function addWireDirect(id, startId, endId, color, pathEl = null, waypoints = []) {
+            if (!pathEl) {
+                pathEl = createSVGPath();
+                pathEl.style.stroke = color;
+                wireLayer.appendChild(pathEl);
+            }
+            pathEl.dataset.wireId = id;
+            wires.push({ id, startId, endId, pathElement: pathEl, waypoints: waypoints });
+            updateWirePaths();
+            triggerEvaluation();
+            
+            const fromName = startId.replace('term-', '');
+            const toName = endId.replace('term-', '');
+            sysLog(`เชื่อมต่อสายไฟสำเร็จ: [ขั้ว ${fromName}] 🔌 [ขั้ว ${toName}]`);
+        }
+
+        function updateWirePaths() {
+            wires.forEach(w => {
+                const p1 = getTerminalPos(w.startId);
+                const p2 = getTerminalPos(w.endId);
+                w.pathElement.setAttribute('d', generateMultiSegmentOrthogonalPath(p1, w.waypoints || [], p2));
+            });
+        }
+
+        function deleteWire(id) {
+            saveState();
+            const wire = wires.find(w => w.id === id);
+            if (wire) wire.pathElement.remove();
+            wires = wires.filter(w => w.id !== id);
+            if (selectedElementId === id) deselectElement();
+            triggerEvaluation();
+        }
+
+        // --- Dragging Components ---
+        let draggedEl = null;
+        let isDraggingComp = false;
+        let dragOffset = {x:0, y:0};
+
+        function startDrag(e) {
+            // ป้องกันการลากอุปกรณ์เมื่อกำลังลากสายไฟอยู่
+            if (isWiring || e.target.closest('.terminal') || e.target.closest('.btn-head') || e.target.closest('.breaker-switch') || e.target.closest('.breaker3p-handle') || e.target.closest('.overload-trip-btn') || e.target.closest('.overload-reset-btn') || e.button !== 0) return;
+            e.stopPropagation();
+            draggedEl = e.currentTarget;
+            isDraggingComp = true;
+            selectElement(draggedEl, false);
+            
+            const rect = draggedEl.getBoundingClientRect();
+            dragOffset.x = (e.clientX - rect.left) / currentScale;
+            dragOffset.y = (e.clientY - rect.top) / currentScale;
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            saveState(); // Save state before moving
+        }
+
+        function drag(e) {
+            if (!isDraggingComp || !draggedEl) return;
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            const x = (e.clientX - canvasRect.left) / currentScale - dragOffset.x;
+            const y = (e.clientY - canvasRect.top) / currentScale - dragOffset.y;
+            
+            // Snap to grid (20px)
+            draggedEl.style.left = Math.round(x / 20) * 20 + 'px';
+            draggedEl.style.top = Math.round(y / 20) * 20 + 'px';
+            updateWirePaths();
+        }
+
+        function stopDrag() {
+            isDraggingComp = false; draggedEl = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        // --- Selection & Properties ---
+        let selectedElementId = null;
+        let selectedType = null;
+
+        function selectElement(el, isWire) {
+            deselectElement();
+            selectedElementId = isWire ? el.dataset.wireId : el.id;
+            selectedType = isWire ? 'wire' : 'component';
+            el.classList.add(isWire ? 'selected-wire' : 'selected-component');
+            document.getElementById('top-actions').classList.remove('hidden');
+            showProperties(el, isWire);
+        }
+
+        function deselectElement() {
+            if (selectedElementId) {
+                const el = selectedType === 'wire' 
+                    ? document.querySelector(`.wire-path[data-wire-id="${selectedElementId}"]`)
+                    : document.getElementById(selectedElementId);
+                if (el) el.classList.remove('selected-wire', 'selected-component');
+            }
+            selectedElementId = null; selectedType = null;
+            document.getElementById('top-actions').classList.add('hidden');
+            propertiesPanel.classList.add('hidden');
+        }
+
+        document.getElementById('btn-top-delete').addEventListener('click', () => {
+            if (!selectedElementId) return;
+            if (selectedType === 'wire') { deleteWire(selectedElementId); }
+            else {
+                saveState();
+                // Remove attached wires
+                wires.filter(w => w.startId.includes(selectedElementId) || w.endId.includes(selectedElementId))
+                     .forEach(w => deleteWire(w.id));
+                document.getElementById(selectedElementId).remove();
+                deselectElement();
+                triggerEvaluation();
+            }
+        });
+
+        function showProperties(el, isWire) {
+            if (isWire) return; // การลากสายระบบใหม่ไม่มี property ปรับแก้สายแล้ว
+            const type = el.dataset.type;
+            
+            let html = "";
+            if (type === 'lamp') {
+                const curColor = el.querySelector('.comp-lamp').dataset.color || 'green';
+                html = `
+                    <label class="block font-medium text-slate-700">สีหลอดไฟ:</label>
+                    <select id="prop-lamp-color" class="border border-slate-300 rounded p-1.5 w-full outline-none focus:border-blue-500">
+                        <option value="green" ${curColor==='green'?'selected':''}>เขียว (Green)</option>
+                        <option value="red" ${curColor==='red'?'selected':''}>แดง (Red)</option>
+                        <option value="yellow" ${curColor==='yellow'?'selected':''}>เหลือง (Yellow)</option>
+                    </select>
+                `;
+            } else if (type === 'breaker3p') {
+                html = `<div class="text-slate-500 bg-slate-100 p-2 rounded text-center border text-xs">
+                    <strong class="text-slate-800 text-sm">เบรกเกอร์ 3 เฟส (MCCB)</strong><br>
+                    <p class="mt-1">สวิตช์ตัดต่อวงจรหลัก 3 เฟส (L1, L2, L3)</p>
+                    <p class="text-red-500 font-bold mt-1 mb-2">คลิกที่สวิตช์เพื่อเปิด (ON) หรือปิด (OFF)</p>
+                </div>`;
+            } else if (type === 'overload') {
+                const limit = el.dataset.ampLimit || "9";
+                html = `
+                    <label class="block font-semibold text-slate-700">พิกัดปรับตั้งกระแส (Amps):</label>
+                    <div class="flex gap-2 items-center my-1">
+                        <input type="range" id="prop-overload-amps" min="1" max="20" step="1" value="${limit}" class="w-full">
+                        <span id="prop-overload-val" class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-xs">${limit}A</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2">
+                        <strong>Overload Relay Contacts:</strong><br>
+                        - 95 & 96: หน้าสัมผัส NC (ปกติปิด) <br>
+                        - 97 & 98: หน้าสัมผัส NO (ปกติเปิด) <br>
+                        <span class="text-red-500 font-semibold">เมื่อทริป: NC จะจาก (ตัดวงจรควบคุม) และ NO จะต่อ (แสดงไฟ Alarm)</span>
+                    </div>
+                `;
+            } else if (type === 'motor') {
+                const load = el.dataset.load || "60";
+                html = `
+                    <label class="block font-semibold text-slate-700">โหลดทางกลมอเตอร์ (Mechanical Load %):</label>
+                    <div class="flex gap-2 items-center my-1">
+                        <input type="range" id="prop-motor-load" min="0" max="150" step="5" value="${load}" class="w-full">
+                        <span id="prop-motor-load-val" class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">${load}%</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2 leading-relaxed">
+                        <strong>พฤติกรรมกระแสโหลดจำลอง:</strong><br>
+                        - โหลด &lt; 100%: มอเตอร์กินกระแสปกติ (ปลอดภัย)<br>
+                        - โหลด &ge; 100% (Overload Zone): มอเตอร์กินกระแสเกินพิกัดปรับตั้งของโอเวอร์โหลด หากปล่อยให้ทำงานต่อเนื่อง โลหะไบเมทัลจะร้อนสะสมและสั่งทริปป้องกันมอเตอร์เสียหาย!
+                    </div>
+                `;
+            } else if (type === 'timer') {
+                const delay = el.dataset.delay || "5";
+                html = `
+                    <label class="block font-semibold text-slate-700">เวลาหน่วง (Delay Time):</label>
+                    <div class="flex gap-2 items-center my-1">
+                        <input type="range" id="prop-timer-delay" min="1" max="30" step="1" value="${delay}" class="w-full">
+                        <span id="prop-timer-val" class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-xs">${delay}s</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2">
+                        <strong>การทำงาน (On-Delay):</strong><br>
+                        - เมื่อจ่ายไฟเข้า A1-A2 ตัวจับเวลาจะเริ่มนับ<br>
+                        - เมื่อครบเวลา หน้าสัมผัส 15 จะเปลี่ยนจาก 16(NC) ไปต่อกับ 18(NO)<br>
+                        - หากไฟเลี้ยงดับ จะรีเซ็ตกลับทันที
+                    </div>
+                `;
+            }
+            
+            if (html !== "") {
+                propertiesPanel.classList.remove('hidden');
+                propertiesPanel.classList.add('flex');
+                propertiesContent.innerHTML = html;
+                
+                if (type === 'lamp') {
+                    document.getElementById('prop-lamp-color').addEventListener('change', (e) => {
+                        const lamp = el.querySelector('.comp-lamp');
+                        lamp.dataset.color = e.target.value;
+                        lamp.querySelector('.lamp-bulb').className = `lamp-bulb color-${e.target.value}`;
+                    });
+                } else if (type === 'overload') {
+                    const slider = document.getElementById('prop-overload-amps');
+                    const valText = document.getElementById('prop-overload-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.ampLimit = e.target.value;
+                        valText.textContent = e.target.value + "A";
+                        // Update text on component view
+                        const infoBox = el.querySelector('.ov-info');
+                        if (infoBox) {
+                            infoBox.innerHTML = `RC: ${e.target.value} A<br>95-96: NC<br>97-98: NO`;
+                        }
+                    });
+                } else if (type === 'motor') {
+                    const slider = document.getElementById('prop-motor-load');
+                    const valText = document.getElementById('prop-motor-load-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.load = e.target.value;
+                        valText.textContent = e.target.value + "%";
+                        triggerEvaluation();
+                    });
+                } else if (type === 'timer') {
+                    const slider = document.getElementById('prop-timer-delay');
+                    const valText = document.getElementById('prop-timer-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.delay = e.target.value;
+                        valText.textContent = e.target.value + "s";
+                        el.querySelector('.time-display').textContent = e.target.value + " sec";
+                        const maxRotation = 300;
+                        const rotation = (e.target.value / 30) * maxRotation - (maxRotation / 2);
+                        el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                    });
+                }
+            } else {
+                propertiesPanel.classList.add('hidden');
+            }
+        }
+
+        // --- ELECTRICAL SIMULATION ENGINE ---
+        
+        function triggerEvaluation() {
+            if(simulationActive || isExploding) return;
+            simulationActive = true;
+            setTimeout(() => {
+                evaluateElectricalCircuit();
+                simulationActive = false;
+            }, 10);
+        }
+
+        function buildAdjacencyList() {
+            let adj = {};
+            const addEdge = (u, v) => {
+                if(!adj[u]) adj[u] = new Set(); if(!adj[v]) adj[v] = new Set();
+                adj[u].add(v); adj[v].add(u);
+            };
+
+            // 1. Add wires
+            wires.forEach(w => addEdge(w.startId, w.endId));
+
+            // 2. Add internal component logic
+            document.querySelectorAll('.draggable-item').forEach(comp => {
+                const id = comp.id;
+                const type = comp.dataset.type;
+
+                if (type === 'breaker3p') {
+                    const box = comp.querySelector('.comp-breaker3p');
+                    if (box.dataset.state === "on") {
+                        addEdge(`term-${id}-L1`, `term-${id}-T1`);
+                        addEdge(`term-${id}-L2`, `term-${id}-T2`);
+                        addEdge(`term-${id}-L3`, `term-${id}-T3`);
+                    }
+                }
+                else if (type === 'button_no' || type === 'button_nc') {
+                    const isPressed = comp.dataset.pressed === "true";
+                    if (isPressed) {
+                        addEdge(`term-${id}-3`, `term-${id}-4`); // NO closes
+                    } else {
+                        addEdge(`term-${id}-1`, `term-${id}-2`); // NC normally closed
+                    }
+                }
+                else if (type === 'contactor') {
+                    const isActive = comp.querySelector('.comp-contactor').classList.contains('active');
+                    if (isActive) {
+                        addEdge(`term-${id}-13`, `term-${id}-14`); // NO closes
+                        addEdge(`term-${id}-L1`, `term-${id}-T1`); // Main L1 closes
+                        addEdge(`term-${id}-L2`, `term-${id}-T2`); // Main L2 closes
+                        addEdge(`term-${id}-L3`, `term-${id}-T3`); // Main L3 closes
+                    } else {
+                        addEdge(`term-${id}-21`, `term-${id}-22`); // NC is closed normally
+                    }
+                }
+                else if (type === 'overload') {
+                    const ov = comp.querySelector('.comp-overload');
+                    const isTripped = ov.dataset.tripped === "true";
+                    
+                    // Power contacts (Always straight L1-T1, L2-T2, L3-T3, overload only detects and trips aux)
+                    addEdge(`term-${id}-L1`, `term-${id}-T1`);
+                    addEdge(`term-${id}-L2`, `term-${id}-T2`);
+                    addEdge(`term-${id}-L3`, `term-${id}-T3`);
+
+                    if (isTripped) {
+                        // Tripped: NO aux is closed (97-98), NC aux is open (95-96)
+                        addEdge(`term-${id}-97`, `term-${id}-98`);
+                    } else {
+                        // Normal: NC aux is closed (95-96), NO aux is open (97-98)
+                        addEdge(`term-${id}-95`, `term-${id}-96`);
+                    }
+                }
+                else if (type === 'timer') {
+                    const isTripped = comp.dataset.tripped === "true";
+                    if (isTripped) {
+                        addEdge(`term-${id}-15`, `term-${id}-18`); // NO closes when time is up
+                    } else {
+                        addEdge(`term-${id}-15`, `term-${id}-16`); // NC normally closed
+                    }
+                }
+            });
+
+            return adj;
+        }
+
+        function getReachableNodes(adjList, startNodes) {
+            let visited = new Set();
+            let queue = [...startNodes];
+            queue.forEach(n => visited.add(n));
+
+            while(queue.length > 0) {
+                let curr = queue.shift();
+                if (adjList[curr]) {
+                    for (let neighbor of adjList[curr]) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+            }
+            return visited;
+        }
+
+        // Check if any two phases/lines intersect directly (without load)
+        function checkShortCircuit(r) {
+            const isect = (a, b) => {
+                if (!a || !b || a.size === 0 || b.size === 0) return false;
+                for (let x of a) if (b.has(x)) return true;
+                return false;
+            };
+
+            if (isect(r.L1, r.L2)) return "L1 ลัดวงจรกับ L2 (Phase-to-Phase)";
+            if (isect(r.L2, r.L3)) return "L2 ลัดวงจรกับ L3 (Phase-to-Phase)";
+            if (isect(r.L1, r.L3)) return "L1 ลัดวงจรกับ L3 (Phase-to-Phase)";
+            
+            if (isect(r.L1, r.N)) return "L1 ลัดวงจรลง N (Phase-to-Neutral)";
+            if (isect(r.L2, r.N)) return "L2 ลัดวงจรลง N (Phase-to-Neutral)";
+            if (isect(r.L3, r.N)) return "L3 ลัดวงจรลง N (Phase-to-Neutral)";
+            
+            if (isect(r.L1, r.PE)) return "L1 ลัดวงจรลงกราวด์ (Ground Fault)";
+            if (isect(r.L2, r.PE)) return "L2 ลัดวงจรลงกราวด์ (Ground Fault)";
+            if (isect(r.L3, r.PE)) return "L3 ลัดวงจรลงกราวด์ (Ground Fault)";
+
+            return null;
+        }
+
+        function triggerExplosion(reason) {
+            isExploding = true;
+            SoundEngine.playExplosion(); // เล่นเสียงระเบิด
+            const overlay = document.getElementById('explosion-overlay');
+            const reasonText = document.getElementById('explosion-reason');
+            
+            // Trip all breakers immediately (MDB & MCCB)
+            document.querySelectorAll('.draggable-item[data-type="mainbox"]').forEach(el => {
+                el.dataset.breaker = "off";
+                el.querySelector('.comp-mainbox').classList.remove('on');
+            });
+            document.querySelectorAll('.draggable-item[data-type="breaker3p"]').forEach(el => {
+                const box = el.querySelector('.comp-breaker3p');
+                box.dataset.state = "off";
+                box.classList.remove('on');
+                box.classList.add('off');
+            });
+            
+            reasonText.innerText = reason;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            workspace.classList.add('shake-effect');
+            
+            sysLog(`💥 ลัดวงจร! สาเหตุ: ${reason} (เบรกเกอร์ทริปอัตโนมัติ)`);
+
+            // Force stop motor sound if explosion happens
+            SoundEngine.stopMotor();
+            wasMotorSpinningGlobal = false;
+
+            // Hide explosion after 1.5 seconds
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+                workspace.classList.remove('shake-effect');
+                isExploding = false;
+                evaluateElectricalCircuit(); // Re-eval to update visuals to OFF
+            }, 1500);
+        }
+
+        function evaluateElectricalCircuit() {
+            const sources = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+
+            document.querySelectorAll('.draggable-item[data-type="mainbox"]').forEach(p => {
+                sources.N.add(`term-${p.id}-N1`); sources.N.add(`term-${p.id}-N2`); sources.N.add(`term-${p.id}-N3`);
+                sources.PE.add(`term-${p.id}-PE1`); sources.PE.add(`term-${p.id}-PE2`); sources.PE.add(`term-${p.id}-PE3`);
+
+                if (p.dataset.breaker === "on") {
+                    sources.L1.add(`term-${p.id}-L1`);
+                    sources.L2.add(`term-${p.id}-L2`);
+                    sources.L3.add(`term-${p.id}-L3`);
+                }
+            });
+
+            let iterations = 0;
+            let changed = true;
+            let currentReachable = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+
+            while (changed && iterations < 5) {
+                changed = false;
+                iterations++;
+                
+                let adjList = buildAdjacencyList();
+                
+                currentReachable.L1 = getReachableNodes(adjList, sources.L1);
+                currentReachable.L2 = getReachableNodes(adjList, sources.L2);
+                currentReachable.L3 = getReachableNodes(adjList, sources.L3);
+                currentReachable.N = getReachableNodes(adjList, sources.N);
+                currentReachable.PE = getReachableNodes(adjList, sources.PE);
+
+                // --- SHORT CIRCUIT DETECTION ---
+                let shortReason = checkShortCircuit(currentReachable);
+                if (shortReason) {
+                    triggerExplosion(shortReason);
+                    // Clear all reachables since power is immediately cut
+                    currentReachable = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+                    break;
+                }
+
+                let anyPhase = new Set([...currentReachable.L1, ...currentReachable.L2, ...currentReachable.L3]);
+
+                document.querySelectorAll('.draggable-item[data-type="contactor"]').forEach(comp => {
+                    const k = comp.querySelector('.comp-contactor');
+                    const a1 = `term-${comp.id}-A1`;
+                    const a2 = `term-${comp.id}-A2`;
+                    
+                    const isEnergized = (anyPhase.has(a1) && currentReachable.N.has(a2)) || 
+                                        (anyPhase.has(a2) && currentReachable.N.has(a1));
+                    
+                    const currentlyActive = k.classList.contains('active');
+
+                    if (isEnergized !== currentlyActive) {
+                        if (isEnergized) k.classList.add('active');
+                        else k.classList.remove('active');
+                        changed = true; 
+                    }
+                });
+            }
+
+            // Update Visuals
+            let anyPhaseFinal = new Set([...currentReachable.L1, ...currentReachable.L2, ...currentReachable.L3]);
+
+            document.querySelectorAll('.draggable-item[data-type="lamp"]').forEach(comp => {
+                const lamp = comp.querySelector('.comp-lamp');
+                const x1 = `term-${comp.id}-x1`;
+                const x2 = `term-${comp.id}-x2`;
+                
+                const isLit = (anyPhaseFinal.has(x1) && currentReachable.N.has(x2)) || 
+                              (anyPhaseFinal.has(x2) && currentReachable.N.has(x1));
+                
+                if (isLit) lamp.classList.add('active');
+                else lamp.classList.remove('active');
+            });
+
+            wires.forEach(w => {
+                if (anyPhaseFinal.has(w.startId) || currentReachable.N.has(w.startId)) {
+                    w.pathElement.classList.add('wire-live');
+                } else {
+                    w.pathElement.classList.remove('wire-live');
+                }
+            });
+
+            // --- MOTOR & OVERLOAD REALTIME FEEDBACK ---
+            let motorIsSpinning = false;
+            let currentMotorAmps = 0.0;
+            let currentMotorLoadPercent = 0;
+            let anyMotorCurrentlySpinning = false; // ตัวแปรสำหรับตรวจสอบเสียง
+            
+            document.querySelectorAll('.draggable-item[data-type="motor"]').forEach(comp => {
+                const motor = comp.querySelector('.comp-motor');
+                const u1 = `term-${comp.id}-U1`;
+                const v1 = `term-${comp.id}-V1`;
+                const w1 = `term-${comp.id}-W1`;
+                const ind = motor.querySelector('.speed-indicator');
+                const gauge = document.getElementById(`gauge-${comp.id}`);
+                
+                let forward = false;
+                let reverse = false;
+
+                if (currentReachable.L1.has(u1) && currentReachable.L2.has(v1) && currentReachable.L3.has(w1)) forward = true;
+                else if (currentReachable.L3.has(u1) && currentReachable.L2.has(v1) && currentReachable.L1.has(w1)) reverse = true;
+                else if (currentReachable.L2.has(u1) && currentReachable.L1.has(v1) && currentReachable.L3.has(w1)) reverse = true;
+                else if (anyPhaseFinal.has(u1) && anyPhaseFinal.has(v1) && anyPhaseFinal.has(w1)) forward = true; 
+
+                motor.classList.remove('spin-fwd', 'spin-rev');
+                ind.classList.remove('hidden', 'bg-green-600', 'bg-red-600', 'bg-slate-800');
+                
+                const loadPercent = parseFloat(comp.dataset.load || "60");
+                currentMotorLoadPercent = loadPercent;
+
+                if (forward || reverse) {
+                    motorIsSpinning = true;
+                    anyMotorCurrentlySpinning = true; // เปิดธงให้เสียงทำงาน
+                    // Current simulation base math: 6A nominal at 60% load, up to 15A at 150% load.
+                    currentMotorAmps = parseFloat(((loadPercent / 100.0) * 10.0).toFixed(1));
+                    
+                    if (forward) {
+                        motor.classList.add('spin-fwd');
+                        ind.textContent = "FORWARD"; ind.classList.add('bg-green-600');
+                    } else {
+                        motor.classList.add('spin-rev');
+                        ind.textContent = "REVERSE"; ind.classList.add('bg-red-600');
+                    }
+                    
+                    if (gauge) {
+                        gauge.textContent = `Load: ${loadPercent}% | I: ${currentMotorAmps}A`;
+                        if (loadPercent >= 100) {
+                            gauge.classList.add('overloaded');
+                        } else {
+                            gauge.classList.remove('overloaded');
+                        }
+                    }
+                } else {
+                    currentMotorAmps = 0.0;
+                    ind.textContent = "STOP"; ind.classList.add('bg-slate-800');
+                    if (gauge) {
+                        gauge.textContent = `Load: ${loadPercent}% | I: 0.0A`;
+                        gauge.classList.remove('overloaded');
+                    }
+                }
+            });
+
+            // จัดการเสียงมอเตอร์ (เปิดเสียงถ้ามีตัวใดตัวหนึ่งหมุน และปิดเสียงถ้าหยุดหมด)
+            if (anyMotorCurrentlySpinning && !wasMotorSpinningGlobal && !isExploding) {
+                SoundEngine.startMotor();
+                wasMotorSpinningGlobal = true;
+            } else if (!anyMotorCurrentlySpinning && wasMotorSpinningGlobal) {
+                SoundEngine.stopMotor();
+                wasMotorSpinningGlobal = false;
+            }
+
+            // --- THERMAL OVERLOAD ACCUMULATION LOGIC ---
+            document.querySelectorAll('.draggable-item[data-type="overload"]').forEach(comp => {
+                const ov = comp.querySelector('.comp-overload');
+                const id = comp.id;
+                const ampLimitSetting = parseFloat(comp.dataset.ampLimit || "9");
+                const isTripped = ov.dataset.tripped === "true";
+                const heatBar = document.getElementById(`heat-bar-${id}`);
+
+                // Overload only heats up if motor is spinning and consuming current through the overload contacts
+                // To simplify: We check if there is connection from L1/L2/L3 final sources to Overload input, and then to motor.
+                const hasPowerThroughOverload = anyPhaseFinal.has(`term-${id}-L1`) && 
+                                               anyPhaseFinal.has(`term-${id}-L2`) && 
+                                               anyPhaseFinal.has(`term-${id}-L3`);
+
+                if (motorIsSpinning && hasPowerThroughOverload && !isTripped) {
+                    // Check if current exceeds the Overload Relay's Dial Setting (Amps Limit)
+                    if (currentMotorAmps > ampLimitSetting) {
+                        // Accumulate heat proportional to current excess ratio
+                        const overloadRatio = currentMotorAmps / ampLimitSetting; // e.g. 12A / 9A = 1.33
+                        const heatRiseSpeed = (overloadRatio - 1) * 2.5; // Custom scaling speed
+                        thermalOverloadHeat = Math.min(100, thermalOverloadHeat + heatRiseSpeed);
+                        
+                        // Output warm warning to user log
+                        if (thermalOverloadHeat > 20 && Math.random() < 0.15) {
+                            sysLog(`⚠️ กระแสเกินพิกัดปรับตั้ง! I: ${currentMotorAmps}A / RC: ${ampLimitSetting}A (โอเวอร์โหลดกำลังเริ่มสะสมความร้อน ${Math.round(thermalOverloadHeat)}%)`);
+                        }
+
+                        // Automatic Thermal Trip!
+                        if (thermalOverloadHeat >= 100) {
+                            ov.dataset.tripped = "true";
+                            ov.classList.add('tripped');
+                            SoundEngine.playTrip(); // เล่นเสียงทริปอัตโนมัติ
+                            sysLog(`⚠️ โอเวอร์โหลดทริปอัตโนมัติ! (Thermal Bimetal Tripped) เนื่องจากมีกระแสไฟฟ้าเกินต่อเนื่องที่ ${currentMotorAmps}A (ปรับตั้งไว้ที่ ${ampLimitSetting}A)`);
+                            
+                            // Re-evaluate circuit to cut power (NC opens)
+                            evaluateElectricalCircuit();
+                        }
+                    } else {
+                        // Current is safe, cool down towards 0
+                        thermalOverloadHeat = Math.max(0, thermalOverloadHeat - 1.5);
+                    }
+                } else {
+                    // Motor is off or no current, cool down bimetal rapidly
+                    thermalOverloadHeat = Math.max(0, thermalOverloadHeat - 3.0);
+                }
+
+                // Update thermal bimetal graphic indicator bar
+                if (heatBar) {
+                    heatBar.style.width = `${thermalOverloadHeat}%`;
+                    if (thermalOverloadHeat > 75) {
+                        heatBar.style.background = '#ef4444'; // Red
+                    } else if (thermalOverloadHeat > 40) {
+                        heatBar.style.background = '#f59e0b'; // Amber
+                    } else {
+                        heatBar.style.background = '#3b82f6'; // Blue
+                    }
+                }
+            });
+
+            // --- TIMER LOGIC (Check Power Status) ---
+            let timerPowerChanged = false;
+            document.querySelectorAll('.draggable-item[data-type="timer"]').forEach(comp => {
+                const a1 = `term-${comp.id}-A1`;
+                const a2 = `term-${comp.id}-A2`;
+                const isEnergized = (anyPhaseFinal.has(a1) && currentReachable.N.has(a2)) || 
+                                    (anyPhaseFinal.has(a2) && currentReachable.N.has(a1));
+                
+                const wasEnergized = comp.dataset.energized === "true";
+                
+                if (isEnergized && !wasEnergized) {
+                    comp.dataset.energized = "true";
+                    comp.dataset.startTime = Date.now();
+                    comp.querySelector('.led-pw').classList.add('on');
+                } else if (!isEnergized && wasEnergized) {
+                    comp.dataset.energized = "false";
+                    comp.dataset.startTime = "0";
+                    
+                    if (comp.dataset.tripped === "true") {
+                        comp.dataset.tripped = "false";
+                        timerPowerChanged = true; // State changed! Needs re-evaluation immediately to open contacts!
+                    }
+                    comp.querySelector('.led-pw').classList.remove('on');
+                    comp.querySelector('.led-up').classList.remove('up');
+                }
+            });
+
+            if (timerPowerChanged) {
+                 setTimeout(evaluateElectricalCircuit, 10);
+            }
+        }
+
+        // --- Active simulation interval (Runs every 400ms to calculate bimetal thermal accumulation) ---
+        if (thermalInterval) clearInterval(thermalInterval);
+        thermalInterval = setInterval(() => {
+            if (!isExploding) {
+                let circuitNeedsReEval = false;
+
+                // Check Timer Ticking
+                document.querySelectorAll('.draggable-item[data-type="timer"]').forEach(comp => {
+                    if (comp.dataset.energized === "true" && comp.dataset.tripped !== "true") {
+                        const startTime = parseInt(comp.dataset.startTime || Date.now());
+                        const delay = parseFloat(comp.dataset.delay || "5") * 1000;
+                        if (Date.now() - startTime >= delay) {
+                            comp.dataset.tripped = "true";
+                            comp.querySelector('.led-up').classList.add('up');
+                            sysLog(`⏱️ Timer ${comp.id} ทำงานครบกำหนด (${comp.dataset.delay}s)`);
+                            circuitNeedsReEval = true;
+                        }
+                    }
+                });
+
+                if (circuitNeedsReEval) {
+                    evaluateElectricalCircuit();
+                } else {
+                    evaluateElectricalCircuit();
+                }
+            }
+        }, 400);
+
+        // --- Save & Load File System ---
+        function exportToFile() {
+            if (!currentUser) {
+                alert("กรุณาเข้าสู่ระบบก่อนบันทึกไฟล์");
+                return;
+            }
+            if (currentUser.isGuest) {
+                alert("โหมดทดลองใช้: ไม่สามารถบันทึกไฟล์ได้ กรุณาเข้าสู่ระบบด้วยบัญชีนักเรียน");
+                sysLog("⚠️ โหมดทดลองใช้: ไม่สามารถบันทึกไฟล์ได้");
+                return;
+            }
+            if (!currentUser.canSaveLoad) {
+                alert("คุณยังไม่ได้รับสิทธิ์ให้บันทึกไฟล์ กรุณาติดต่อ Admin ให้ปลดล็อคให้ครับ");
+                sysLog("❌ ไม่อนุญาตให้บันทึกไฟล์ (รอ Admin อนุมัติ)");
+                return;
+            }
+
+            const state = {
+                components: Array.from(document.querySelectorAll('.draggable-item')).map(el => ({
+                    id: el.id, type: el.dataset.type, left: el.style.left, top: el.style.top,
+                    breaker: el.querySelector('.comp-mainbox') ? el.dataset.breaker : null,
+                    breaker3p: el.querySelector('.comp-breaker3p') ? el.querySelector('.comp-breaker3p').dataset.state : null,
+                    color: el.querySelector('.comp-lamp') ? el.querySelector('.comp-lamp').dataset.color : null,
+                    tripped: el.querySelector('.comp-overload') ? el.querySelector('.comp-overload').dataset.tripped : null,
+                    ampLimit: el.querySelector('.comp-overload') ? (el.dataset.ampLimit || "9") : null,
+                    load: el.dataset.type === 'motor' ? (el.dataset.load || "60") : null,
+                    delay: el.dataset.type === 'timer' ? (el.dataset.delay || "5") : null
+                })),
+                wires: wires.map(w => ({ 
+                    id: w.id, start: w.startId, end: w.endId, color: w.pathElement.style.stroke, 
+                    waypoints: w.waypoints || [] 
+                }))
+            };
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Generate filename with timestamp
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}`;
+            a.download = `circuit_save_${timeStr}.txt`;
+            
+            a.click();
+            URL.revokeObjectURL(url);
+            sysLog("💾 บันทึกไฟล์วงจรเรียบร้อยแล้ว (Saved)");
+        }
+
+        function importFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const state = JSON.parse(e.target.result);
+                    if (!state.components || !state.wires) throw new Error("Invalid format");
+
+                    // Clear current workspace
+                    wires.forEach(w => w.pathElement.remove()); wires = [];
+                    document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+                    deselectElement();
+                    historyStack = []; 
+                    thermalOverloadHeat = 0;
+
+                    // Restore components
+                    state.components.forEach(c => spawnComponent(c.type, parseFloat(c.left), parseFloat(c.top), c));
+                    
+                    // Restore wires
+                    state.wires.forEach(w => {
+                        const sEl = document.getElementById(w.start);
+                        const eEl = document.getElementById(w.end);
+                        if (sEl && eEl) addWireDirect(w.id, w.start, w.end, w.color, null, w.waypoints);
+                    });
+                    
+                    triggerEvaluation();
+                    sysLog(`📂 โหลดไฟล์สำเร็จ: ${file.name}`);
+                } catch (err) {
+                    sysLog(`⚠️ โหลดไฟล์ไม่สำเร็จ: รูปแบบไฟล์ไม่ถูกต้อง`);
+                    console.error("File load error:", err);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset input to allow loading the same file again
+        }
+
+        // --- Init & Hotkeys ---
+        document.getElementById('btn-save').addEventListener('click', exportToFile);
+        document.getElementById('btn-load-trigger').addEventListener('click', () => {
+            if (!currentUser) {
+                alert("กรุณาเข้าสู่ระบบก่อนเปิดไฟล์");
+                return;
+            }
+            if (currentUser.isGuest) {
+                alert("โหมดทดลองใช้: ไม่สามารถเปิดไฟล์ได้ กรุณาเข้าสู่ระบบด้วยบัญชีนักเรียน");
+                sysLog("⚠️ โหมดทดลองใช้: ไม่สามารถเปิดไฟล์ได้");
+                return;
+            }
+            if (!currentUser.canSaveLoad) {
+                alert("คุณยังไม่ได้รับสิทธิ์ให้เปิดไฟล์ กรุณาติดต่อ Admin ให้ปลดล็อคให้ครับ");
+                sysLog("❌ ไม่อนุญาตให้เปิดไฟล์ (รอ Admin อนุมัติ)");
+                return;
+            }
+            document.getElementById('file-input').click();
+        });
+        document.getElementById('file-input').addEventListener('change', importFromFile);
+
+        document.getElementById('btn-undo').addEventListener('click', undo);
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            wires.forEach(w => w.pathElement.remove()); wires = [];
+            document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            historyStack = [];
+            thermalOverloadHeat = 0;
+            sysLog("รีเซ็ตพื้นที่ทำงาน (Workspace reset)");
+            spawnComponent('mainbox', 40, 40);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isWiring) {
+                cancelWiring();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
+                document.getElementById('btn-top-delete').click();
+            }
+        });
+
+        window.onload = () => {
+            initUserSession();
+            sysLog("ระบบพร้อมทำงาน (System ready)");
+            spawnComponent('mainbox', 40, 40);
+            initVisitorCount();
+            updateStats();
+        };
+
+        // --- STATS SYSTEM LOGIC (Firebase REST API) ---
+        const statSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        let lastMemberCount = -1;
+
+        async function initVisitorCount() {
+            try {
+                // อ่านยอดผู้เข้าชมปัจจุบัน
+                const res = await fetch(`${FIREBASE_DB_URL}/stats/visitors.json`);
+                let visitors = 0;
+                if (res.ok) {
+                    visitors = await res.json() || 0;
+                }
+                
+                // ถ้ายืนยันว่าเป็นการเปิดหน้าต่างใหม่ (ไม่มี session storage) ให้เพิ่มยอด
+                if (!sessionStorage.getItem('visited')) {
+                    visitors++;
+                    await fetch(`${FIREBASE_DB_URL}/stats/visitors.json`, {
+                        method: 'PUT',
+                        body: JSON.stringify(visitors)
+                    });
+                    sessionStorage.setItem('visited', 'true');
+                }
+                
+                document.getElementById('stat-visitors').textContent = visitors.toLocaleString();
+            } catch (err) {
+                console.error("Visitor count fetch failed", err);
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const now = Date.now();
+                
+                // 1. ส่งสัญญาณ (Ping) ว่ากำลังออนไลน์
+                await fetch(`${FIREBASE_DB_URL}/stats/online/${statSessionId}.json`, {
+                    method: 'PUT',
+                    body: JSON.stringify(now)
+                });
+
+                // 2. ดึงข้อมูลผู้ใช้ออนไลน์ทั้งหมด
+                const onlineRes = await fetch(`${FIREBASE_DB_URL}/stats/online.json`);
+                if (onlineRes.ok) {
+                    const onlineData = await onlineRes.json();
+                    let onlineCount = 0;
+                    if (onlineData) {
+                        const cutoff = now - 30000; // ถือว่าออฟไลน์ถ้าไม่ส่ง Ping เกิน 30 วินาที
+                        for (const key in onlineData) {
+                            if (onlineData[key] > cutoff) onlineCount++;
+                        }
+                    }
+                    document.getElementById('stat-online').textContent = onlineCount || 1;
+                }
+
+                // 3. ดึงจำนวนสมาชิกทั้งหมด
+                const usersRes = await fetch(`${FIREBASE_DB_URL}/users.json`);
+                if (usersRes.ok) {
+                    const usersData = await usersRes.json();
+                    const memberCount = usersData ? Object.keys(usersData).length : 0;
+                    document.getElementById('stat-members').textContent = memberCount.toLocaleString();
+                    
+                    // แสดงป้าย "+1 ใหม่" ถ้ามีสมาชิกเพิ่มขึ้นระหว่างที่เปิดหน้าเว็บอยู่
+                    if (lastMemberCount !== -1 && memberCount > lastMemberCount) {
+                        const badge = document.getElementById('stat-new-member');
+                        badge.classList.remove('hidden');
+                        setTimeout(() => badge.classList.add('hidden'), 5000); // ซ่อนหลังจากผ่านไป 5 วินาที
+                    }
+                    lastMemberCount = memberCount;
+                }
+
+            } catch (err) {
+                console.error("Stats update failed", err);
+            }
+        }
+
+        // อัปเดตสถิติทุกๆ 15 วินาที
+        setInterval(updateStats, 15000); 
+
+        // ลบสถานะออนไลน์ของตัวเองออกเมื่อปิดหน้าเว็บ
+        window.addEventListener('beforeunload', () => {
+            navigator.sendBeacon(`${FIREBASE_DB_URL}/stats/online/${statSessionId}.json`, JSON.stringify(null));
+        });
+
+
+        // --- ADMIN SYSTEM LOGIC ---
+        let isAdminAuthenticated = false;
+
+        function openAdminPanel() {
+            document.getElementById('adminPanelOverlay').classList.remove('hidden');
+            document.getElementById('adminPanelOverlay').classList.add('flex');
+            
+            if (isAdminAuthenticated) {
+                document.getElementById('adminPinView').classList.add('hidden');
+                document.getElementById('adminDashboardView').classList.remove('hidden');
+                document.getElementById('adminDashboardView').classList.add('flex');
+                loadAdminUsers();
+            } else {
+                document.getElementById('adminPinView').classList.remove('hidden');
+                document.getElementById('adminPinView').classList.add('flex');
+                document.getElementById('adminDashboardView').classList.add('hidden');
+                document.getElementById('adminPinInput').value = '';
+                document.getElementById('adminPinError').classList.add('hidden');
+                document.getElementById('adminPinInput').focus();
+            }
+        }
+
+        function closeAdminPanel() {
+            document.getElementById('adminPanelOverlay').classList.add('hidden');
+            document.getElementById('adminPanelOverlay').classList.remove('flex');
+        }
+
+        function verifyAdminPin() {
+            const pin = document.getElementById('adminPinInput').value;
+            // รหัสผ่าน Admin ตามที่กำหนด
+            if (pin === "1471200") {
+                isAdminAuthenticated = true;
+                document.getElementById('adminPinError').classList.add('hidden');
+                document.getElementById('adminPinView').classList.add('hidden');
+                document.getElementById('adminDashboardView').classList.remove('hidden');
+                document.getElementById('adminDashboardView').classList.add('flex');
+                loadAdminUsers();
+            } else {
+                document.getElementById('adminPinError').classList.remove('hidden');
+            }
+        }
+
+        async function loadAdminUsers() {
+            const tbody = document.getElementById('adminUsersList');
+            tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-slate-500"><i class="fas fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</td></tr>`;
+            
+            try {
+                const res = await fetch(`${FIREBASE_DB_URL}/users.json`);
+                if (!res.ok) throw new Error("Network error");
+                
+                const data = await res.json();
+                tbody.innerHTML = '';
+                
+                if (!data) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-slate-500">ไม่มีข้อมูลผู้ใช้งาน</td></tr>`;
+                    return;
+                }
+
+                Object.keys(data).forEach(key => {
+                    const user = data[key];
+                    const canSave = user.canSaveLoad === true;
+                    
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-3">
+                            <div class="font-bold text-slate-800">${user.name || 'ไม่ระบุชื่อ'}</div>
+                            <div class="text-xs text-slate-500">${key.replace(/_/g, '.')}</div>
+                        </td>
+                        <td class="p-3 text-center">
+                            <span class="px-2 py-1 rounded text-xs font-bold ${canSave ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                ${canSave ? '<i class="fas fa-check-circle"></i> อนุญาต' : '<i class="fas fa-times-circle"></i> ล็อก'}
+                            </span>
+                        </td>
+                        <td class="p-3 text-center">
+                            <button onclick="toggleUserAccess('${key}', ${canSave})" class="px-3 py-1.5 rounded text-xs font-bold transition text-white ${canSave ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}">
+                                ${canSave ? 'ยกเลิกสิทธิ์' : 'อนุมัติสิทธิ์'}
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+            } catch (err) {
+                console.error("Admin Load Error:", err);
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-red-500">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>`;
+            }
+        }
+
+        async function toggleUserAccess(userKey, currentStatus) {
+            const newStatus = !currentStatus;
+            try {
+                // อัปเดตข้อมูลไปยัง Firebase
+                await fetch(`${FIREBASE_DB_URL}/users/${userKey}.json`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ canSaveLoad: newStatus })
+                });
+                
+                // โหลดรายการใหม่
+                loadAdminUsers();
+                
+                // ถ้าผู้ใช้ที่โดนเปลี่ยนสิทธิ์คือตัวเอง (กำลังใช้งานอยู่) ให้เปลี่ยน state ปัจจุบันด้วย
+                if (currentUser && sanitizeKey(document.getElementById('loginEmailSim').value || "") === userKey) {
+                    currentUser.canSaveLoad = newStatus;
+                    localStorage.setItem('sim_user_session', JSON.stringify(currentUser));
+                }
+                
+            } catch (err) {
+                alert("เกิดข้อผิดพลาดในการอัปเดตสิทธิ์");
+                console.error(err);
+            }
+        }
+
+    </script>
+</body>
+</html>
