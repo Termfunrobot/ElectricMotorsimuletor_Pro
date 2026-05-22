@@ -3,24 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Electrical Motor Control Simulator with Overload Relay & Adjustable Load</title>
+    <title>Electrical Motor Control Simulator</title>
     <!-- Use Tailwind CSS for rapid styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sarabun:wght@400;500;600;700&display=swap');
+        
         body {
             font-family: 'Sarabun', 'Inter', sans-serif;
-            background-color: #f1f5f9;
+            background-color: #f8fafc;
             overflow-x: hidden;
             user-select: none;
         }
         
         /* --- Workspace & Background --- */
         .workspace-bg {
-            background-color: #e2e8f0;
+            background-color: #f1f5f9;
             background-image: 
-                linear-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+                linear-gradient(rgba(148, 163, 184, 0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
             background-size: 20px 20px;
         }
 
@@ -33,353 +35,377 @@
         /* --- Wiring Styles --- */
         svg#wire-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            overflow: visible; pointer-events: none; z-index: 35; /* ปรับให้สูงกว่าอุปกรณ์ (10) เพื่อให้สายอยู่ด้านบน */
+            overflow: visible; pointer-events: none; z-index: 35;
         }
         .wire-path {
-            fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;
-            pointer-events: auto; cursor: pointer; transition: stroke-width 0.1s, filter 0.1s;
-            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+            fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round;
+            pointer-events: auto; cursor: pointer; transition: stroke-width 0.15s ease, filter 0.15s ease;
+            filter: drop-shadow(1px 3px 2px rgba(0,0,0,0.35));
         }
-        .wire-path:hover { stroke-width: 6; filter: drop-shadow(3px 3px 3px rgba(0,0,0,0.5)); }
+        .wire-path:hover { stroke-width: 6.5; filter: drop-shadow(2px 5px 4px rgba(0,0,0,0.5)); }
         
-        .wire-live { stroke-dasharray: 10, 6; animation: wire-flow 0.6s linear infinite; filter: drop-shadow(0 0 5px currentColor); }
-        @keyframes wire-flow { to { stroke-dashoffset: -16; } }
+        .wire-live { stroke-dasharray: 12, 8; animation: wire-flow 0.5s linear infinite; filter: drop-shadow(0 0 6px currentColor); }
+        @keyframes wire-flow { to { stroke-dashoffset: -20; } }
 
         /* --- Terminals --- */
         .terminal {
-            position: absolute; width: 14px; height: 14px; background: #e5e7eb;
-            border: 2px solid #64748b; border-radius: 50%; cursor: crosshair; z-index: 40;
-            box-shadow: inset 1px 1px 2px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.5);
-            transition: transform 0.1s, background 0.1s, border-color 0.1s, box-shadow 0.1s;
+            position: absolute; width: 14px; height: 14px; 
+            background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+            border: 1.5px solid #64748b; border-radius: 50%; cursor: crosshair; z-index: 40;
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.9), 0 2px 4px rgba(0,0,0,0.4);
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .terminal:hover, .terminal.snap-candidate { 
-            background: #fbbf24; 
-            transform: scale(1.3); 
+            background: linear-gradient(135deg, #fef08a 0%, #f59e0b 100%); 
+            transform: scale(1.35); 
             border-color: #b45309;
-            box-shadow: 0 0 8px rgba(251, 191, 36, 0.8), inset 1px 1px 2px rgba(0,0,0,0.2);
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.8), inset 1px 1px 2px rgba(255,255,255,0.8);
         }
         
         /* Inner screw detail */
         .terminal::after {
             content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 8px; height: 2px; background: #94a3b8; border-radius: 1px; pointer-events: none;
+            width: 8px; height: 2px; background: #64748b; border-radius: 1px; pointer-events: none;
+            box-shadow: 0 1px 0 rgba(255,255,255,0.5);
         }
 
         .terminal-lg { width: 28px !important; height: 28px !important; }
-        .terminal-lg::after { width: 16px !important; height: 4px !important; }
+        .terminal-lg::after { width: 16px !important; height: 3px !important; }
         .terminal-md { width: 20px !important; height: 20px !important; }
-        .terminal-md::after { width: 12px !important; height: 3px !important; }
+        .terminal-md::after { width: 12px !important; height: 2px !important; }
 
         .terminal-label {
-            position: absolute; font-size: 10px; font-weight: bold; color: #334155;
-            pointer-events: none; white-space: nowrap;
+            position: absolute; font-size: 10px; font-weight: 800; color: #334155;
+            pointer-events: none; white-space: nowrap; text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
         }
 
         /* --- Component Shared Styles --- */
         .draggable-item { 
             position: absolute; cursor: grab; z-index: 10; 
-            transform-origin: center; filter: drop-shadow(3px 5px 8px rgba(0,0,0,0.3));
+            transform-origin: center; filter: drop-shadow(4px 8px 12px rgba(0,0,0,0.25));
+            transition: filter 0.2s;
         }
-        .draggable-item:active { cursor: grabbing; z-index: 50; }
+        .draggable-item:active { cursor: grabbing; z-index: 50; filter: drop-shadow(8px 16px 20px rgba(0,0,0,0.35)) scale(1.01); }
         
         .selected-component {
-            outline: 3px dashed #0ea5e9 !important; outline-offset: 4px;
-            filter: drop-shadow(0 0 12px rgba(14, 165, 233, 0.5)); z-index: 15 !important;
+            outline: 3px dashed #0ea5e9 !important; outline-offset: 6px;
+            filter: drop-shadow(0 0 15px rgba(14, 165, 233, 0.6)) !important; z-index: 15 !important;
+            border-radius: 8px;
         }
-        .selected-wire { stroke-dasharray: 6, 6; animation: dash 0.5s linear infinite; filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.8)); }
+        .selected-wire { stroke-dasharray: 8, 8; animation: dash 0.5s linear infinite; filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.9)); }
 
         /* --- Specific Electrical Components --- */
 
         /* 1. Main Breaker Box (MDB) */
         .comp-mainbox {
-            width: 440px; height: 380px; background: #e2e8f0; border: 4px solid #64748b;
-            border-radius: 12px; position: relative; box-shadow: inset 4px 4px 10px rgba(255,255,255,0.8), 4px 8px 16px rgba(0,0,0,0.2);
+            width: 440px; height: 380px; 
+            background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%); 
+            border: 2px solid #cbd5e1;
+            border-radius: 16px; position: relative; 
+            box-shadow: inset 2px 2px 5px rgba(255,255,255,1), inset -3px -3px 10px rgba(0,0,0,0.05);
         }
         .breaker-switch {
-            width: 120px; height: 100px; background: #334155; border-radius: 8px;
+            width: 120px; height: 100px; 
+            background: linear-gradient(to bottom, #1e293b, #0f172a); 
+            border-radius: 10px;
             position: absolute; top: 60px; left: 40px; cursor: pointer;
             display: flex; justify-content: center; align-items: center;
-            border: 4px solid #1e293b; transition: all 0.2s; box-shadow: inset 0 4px 10px rgba(0,0,0,0.8);
+            border: 2px solid #334155; transition: all 0.2s; 
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.8), 0 2px 5px rgba(255,255,255,0.5);
         }
         .breaker-handle {
-            width: 80px; height: 40px; background: #ef4444; border-radius: 4px;
-            box-shadow: inset 0 4px 8px rgba(255,255,255,0.3), 0 4px 8px rgba(0,0,0,0.5);
-            transition: transform 0.1s ease-in-out, background 0.2s, box-shadow 0.2s; transform: translateY(24px);
+            width: 80px; height: 40px; 
+            background: linear-gradient(to bottom, #ef4444, #dc2626); 
+            border-radius: 6px;
+            border-top: 1px solid #fca5a5;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.4);
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s; 
+            transform: translateY(24px);
         }
         .comp-mainbox.on .breaker-handle {
-            transform: translateY(-24px); background: #22c55e;
-            box-shadow: inset 0 4px 8px rgba(255,255,255,0.5), 0 4px 20px rgba(34, 197, 94, 0.8);
+            transform: translateY(-24px); 
+            background: linear-gradient(to bottom, #22c55e, #16a34a);
+            border-top: 1px solid #86efac;
+            box-shadow: 0 6px 15px rgba(34, 197, 94, 0.4), inset 0 2px 4px rgba(255,255,255,0.4);
         }
         .busbar {
-            position: absolute; width: 340px; height: 28px; border-radius: 4px;
-            border: 2px solid rgba(0,0,0,0.4); box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+            position: absolute; width: 340px; height: 28px; border-radius: 6px;
+            border: 1px solid #94a3b8; box-shadow: inset 0 2px 4px rgba(255,255,255,0.8), 2px 4px 8px rgba(0,0,0,0.2);
         }
-        .busbar.neutral { background: linear-gradient(to bottom, #e2e8f0, #94a3b8); bottom: 100px; left: 50px; }
+        .busbar.neutral { background: linear-gradient(to bottom, #f1f5f9, #94a3b8); bottom: 100px; left: 50px; }
         .busbar.ground { background: repeating-linear-gradient(45deg, #22c55e, #22c55e 16px, #eab308 16px, #eab308 32px); bottom: 40px; left: 50px; border-color: #15803d; }
         
         .box-warning {
             position: absolute; top: 20px; right: 20px; width: 60px; height: 60px;
-            background: #eab308; border-radius: 4px; border: 4px solid #1e293b;
-            display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 36px; color: #1e293b;
+            background: linear-gradient(135deg, #fde047, #eab308); 
+            border-radius: 8px; border: 3px solid #1e293b;
+            display: flex; justify-content: center; align-items: center; font-weight: 900; font-size: 36px; color: #1e293b;
+            box-shadow: inset 2px 2px 4px rgba(255,255,255,0.5), 2px 4px 6px rgba(0,0,0,0.2);
         }
 
-        /* 2. Magnetic Contactor (S-N10 Style) */
+        /* 2. Magnetic Contactor */
         .comp-contactor {
-            width: 158px; height: 230px; background: #e8e6dd; border: 1px solid #d1cec5;
-            border-radius: 4px; position: relative;
-            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.8), 2px 4px 8px rgba(0,0,0,0.2);
+            width: 158px; height: 230px; 
+            background: linear-gradient(180deg, #f8fafc, #e2e8f0); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #f1f5f9;
+            border-radius: 6px; position: relative;
+            box-shadow: inset 1px 1px 3px rgba(255,255,255,1), 2px 4px 10px rgba(0,0,0,0.15);
         }
         .comp-contactor::before {
             content: ''; position: absolute; left: 10px; right: 10px; top: 48px; bottom: 48px;
-            background: #dfddd4; border-radius: 2px; border: 1px solid #ccc9c0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+            background: linear-gradient(to bottom, #f1f5f9, #e2e8f0); border-radius: 4px; border: 1px solid #cbd5e1;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.05);
         }
         .sn10-core-bg {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 50px; height: 50px; background: #222; border-radius: 2px;
-            border: 2px solid #111; z-index: 1;
+            width: 50px; height: 50px; background: #1e293b; border-radius: 4px;
+            border: 2px solid #0f172a; z-index: 1; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
         }
         .contactor-core {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 36px; height: 36px; background: #111; border: 1px solid #333;
+            width: 36px; height: 36px; background: linear-gradient(145deg, #334155, #0f172a); 
+            border: 1px solid #475569; border-radius: 2px;
             display: flex; justify-content: space-evenly; align-items: center;
-            transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.5); z-index: 2;
+            transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 2;
         }
         .comp-contactor.active {
-            box-shadow: 0 0 15px rgba(14, 165, 233, 0.5), inset 2px 2px 5px rgba(255,255,255,0.8);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3), inset 1px 1px 3px rgba(255,255,255,1);
             border-color: #38bdf8;
         }
         .comp-contactor.active .contactor-core {
             transform: translate(-50%, -50%) scale(0.95) translateY(4px); 
-            box-shadow: inset 0 4px 6px rgba(0,0,0,0.8), 0 0 10px rgba(14, 165, 233, 0.8);
-            background: #000;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.9), 0 0 15px rgba(14, 165, 233, 0.6);
+            background: #020617; border-color: #1e293b;
         }
-        .core-hole { width: 10px; height: 16px; background: #000; border-radius: 1px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.1); }
+        .core-hole { width: 10px; height: 16px; background: #000; border-radius: 2px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.1); }
         .sn10-label {
-            position: absolute; left: 14px; top: 105px; background: #0284c7; color: white;
-            font-weight: bold; font-family: 'Arial', sans-serif; font-size: 13px; padding: 2px 6px;
-            border-radius: 2px; box-shadow: 1px 1px 2px rgba(0,0,0,0.3); z-index: 3; letter-spacing: 0.5px;
+            position: absolute; left: 14px; top: 105px; 
+            background: linear-gradient(to right, #0284c7, #0369a1); color: white;
+            font-weight: 800; font-family: 'Inter', sans-serif; font-size: 13px; padding: 2px 8px;
+            border-radius: 3px; box-shadow: 1px 2px 4px rgba(0,0,0,0.3); z-index: 3; letter-spacing: 0.5px;
+            border: 1px solid #0c4a6e;
         }
-        .sn10-text { position: absolute; font-size: 9px; font-weight: bold; color: #0284c7; pointer-events: none; text-align: center; width: 30px; z-index: 3; }
-        .sn10-text.black { color: #333; }
+        .sn10-text { position: absolute; font-size: 9px; font-weight: 800; color: #0284c7; pointer-events: none; text-align: center; width: 30px; z-index: 3; }
+        .sn10-text.black { color: #475569; }
         .terminal-plate {
-            position: absolute; width: 22px; height: 22px; background: linear-gradient(to bottom, #f8fafc, #cbd5e1);
-            border: 1px solid #94a3b8; border-radius: 2px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.8); z-index: 2;
+            position: absolute; width: 22px; height: 22px; 
+            background: linear-gradient(to bottom, #f8fafc, #cbd5e1);
+            border: 1px solid #94a3b8; border-radius: 4px; 
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.1); z-index: 2;
         }
 
-        /* 3. Thermal Overload Relay (NEW) */
+        /* 3. Thermal Overload Relay */
         .comp-overload {
-            width: 158px; height: 195px; background: #2f3542; border: 1px solid #1e222b;
-            border-radius: 4px; position: relative;
-            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.1), 2px 4px 8px rgba(0,0,0,0.3);
+            width: 158px; height: 195px; 
+            background: linear-gradient(145deg, #1e293b, #0f172a); 
+            border: 1px solid #020617; border-top: 1px solid #334155;
+            border-radius: 6px; position: relative;
+            box-shadow: inset 1px 1px 3px rgba(255,255,255,0.1), 2px 4px 12px rgba(0,0,0,0.4);
         }
         .overload-dial {
             position: absolute; top: 48px; left: 15px; width: 32px; height: 32px;
-            border-radius: 50%; background: #eceff1; border: 2px dashed #78909c;
+            border-radius: 50%; background: #f8fafc; border: 2px dashed #94a3b8;
             display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.3);
         }
         .overload-dial::after {
             content: ''; position: absolute; width: 14px; height: 3px; background: #ef4444;
-            transform: rotate(45deg); border-radius: 1px;
+            transform: rotate(45deg); border-radius: 1px; box-shadow: 0 1px 1px rgba(0,0,0,0.2);
         }
         .overload-trip-btn {
             position: absolute; top: 48px; left: 58px; width: 22px; height: 22px;
-            background: #ef4444; border: 1px solid #b91c1c; border-radius: 2px;
-            cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: bold;
+            background: linear-gradient(to bottom, #ef4444, #dc2626); 
+            border: 1px solid #991b1b; border-radius: 4px;
+            cursor: pointer; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: 800;
+            transition: all 0.1s;
         }
-        .overload-trip-btn:active { transform: translateY(1px); box-shadow: none; }
+        .overload-trip-btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
         .overload-reset-btn {
             position: absolute; top: 48px; left: 88px; width: 22px; height: 22px;
-            background: #3b82f6; border: 1px solid #1d4ed8; border-radius: 50%;
-            cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: bold;
+            background: linear-gradient(to bottom, #3b82f6, #2563eb); 
+            border: 1px solid #1e40af; border-radius: 50%;
+            cursor: pointer; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: 800;
+            transition: all 0.1s;
         }
-        .overload-reset-btn:active { transform: translateY(1px); box-shadow: none; }
+        .overload-reset-btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
         .overload-label {
-            position: absolute; left: 14px; top: 12px; background: #e2e8f0; color: #1e293b;
-            font-weight: bold; font-family: 'Arial', sans-serif; font-size: 11px; padding: 1px 6px;
-            border-radius: 2px; border: 1px solid #94a3b8;
+            position: absolute; left: 14px; top: 12px; background: #e2e8f0; color: #0f172a;
+            font-weight: 900; font-family: 'Inter', sans-serif; font-size: 11px; padding: 2px 6px;
+            border-radius: 3px; border: 1px solid #94a3b8; box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
         .comp-overload.tripped::after {
-            content: 'TRIPPED'; position: absolute; right: 8px; top: 15px; background: #ef4444;
-            color: white; font-size: 9px; font-weight: bold; padding: 1px 4px; border-radius: 2px;
+            content: 'TRIPPED'; position: absolute; right: 8px; top: 15px; 
+            background: linear-gradient(to right, #ef4444, #dc2626);
+            color: white; font-size: 9px; font-weight: 900; padding: 2px 5px; border-radius: 3px;
             animation: pulse 0.6s infinite alternate;
-            box-shadow: 0 0 10px #ef4444;
+            box-shadow: 0 0 10px #ef4444, inset 0 1px 1px rgba(255,255,255,0.4);
+            border: 1px solid #991b1b;
         }
         .comp-overload.tripped {
-            box-shadow: 0 0 15px rgba(239, 68, 68, 0.5), inset 2px 2px 5px rgba(255,255,255,0.1);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4), inset 1px 1px 3px rgba(255,255,255,0.1);
             border-color: #ef4444;
         }
-        @keyframes pulse { 0% { opacity: 0.6; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1.05); } }
 
-        /* Thermal Heat Stack Indicator Graphic */
         .thermal-bar-container {
-            position: absolute; left: 15px; top: 42px; width: 95px; height: 4px;
-            background: #1e222b; border-radius: 1px; overflow: hidden;
+            position: absolute; left: 15px; top: 42px; width: 95px; height: 5px;
+            background: #020617; border-radius: 2px; overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.8); border: 1px solid #334155;
         }
         .thermal-bar {
-            width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #eab308, #ef4444);
-            transition: width 0.3s;
+            width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #f59e0b, #ef4444);
+            transition: width 0.3s; box-shadow: 0 0 5px currentColor;
         }
 
         /* 4. Push Buttons */
         .comp-button {
-            width: 80px; height: 110px; background: #f8fafc; border: 2px solid #cbd5e1;
-            border-radius: 4px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 80px; height: 110px; 
+            background: linear-gradient(to bottom, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05), inset 0 2px 4px rgba(255,255,255,1);
         }
         .btn-head {
-            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
-            box-shadow: 0 6px 0 #94a3b8, 0 8px 10px rgba(0,0,0,0.3); transition: all 0.1s; border: 2px solid rgba(0,0,0,0.2);
+            width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+            box-shadow: 0 6px 0 #94a3b8, 0 10px 15px rgba(0,0,0,0.3); transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); 
+            border: 2px solid rgba(255,255,255,0.2);
         }
         .btn-head:active, .comp-button.pressed .btn-head {
             transform: translateY(6px); box-shadow: 0 0 0 #94a3b8, 0 2px 4px rgba(0,0,0,0.3);
         }
-        .btn-green { background: radial-gradient(circle at 30% 30%, #4ade80, #16a34a); }
-        .btn-green:active, .comp-button.pressed .btn-green { background: #16a34a; }
-        .btn-red { background: radial-gradient(circle at 30% 30%, #f87171, #dc2626); }
-        .btn-red:active, .comp-button.pressed .btn-red { background: #dc2626; }
+        .btn-green { background: radial-gradient(circle at 35% 35%, #86efac, #22c55e, #16a34a); }
+        .btn-red { background: radial-gradient(circle at 35% 35%, #fca5a5, #ef4444, #dc2626); }
 
         /* 5. Pilot Lamp */
         .comp-lamp {
-            width: 60px; height: 80px; background: #f8fafc; border: 2px solid #cbd5e1;
-            border-radius: 4px; position: relative; display: flex; justify-content: center;
+            width: 60px; height: 80px; 
+            background: linear-gradient(to bottom, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; display: flex; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
         .lamp-bulb {
-            width: 44px; height: 44px; border-radius: 50%; margin-top: 8px;
-            background: radial-gradient(circle at 30% 30%, #e2e8f0, #94a3b8); border: 2px solid #64748b;
-            box-shadow: inset 2px 2px 5px rgba(255,255,255,0.5), 0 4px 6px rgba(0,0,0,0.2); transition: all 0.2s;
+            width: 46px; height: 46px; border-radius: 50%; margin-top: 8px;
+            background: radial-gradient(circle at 35% 35%, #f8fafc, #94a3b8); border: 2px solid #64748b;
+            box-shadow: inset 2px 2px 6px rgba(255,255,255,0.8), 0 4px 8px rgba(0,0,0,0.2); transition: all 0.2s;
         }
-        .comp-lamp.active .lamp-bulb.color-green { background: radial-gradient(circle at 40% 40%, #86efac, #16a34a); box-shadow: 0 0 25px 5px rgba(34, 197, 94, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #15803d; }
-        .comp-lamp.active .lamp-bulb.color-red { background: radial-gradient(circle at 40% 40%, #fca5a5, #dc2626); box-shadow: 0 0 25px 5px rgba(239, 68, 68, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #b91c1c; }
-        .comp-lamp.active .lamp-bulb.color-yellow { background: radial-gradient(circle at 40% 40%, #fef08a, #d97706); box-shadow: 0 0 25px 5px rgba(234, 179, 8, 0.8), inset 2px 2px 5px rgba(255,255,255,0.9); border-color: #a16207; }
+        .comp-lamp.active .lamp-bulb.color-green { background: radial-gradient(circle at 40% 40%, #bbf7d0, #22c55e, #15803d); box-shadow: 0 0 30px 8px rgba(34, 197, 94, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #16a34a; }
+        .comp-lamp.active .lamp-bulb.color-red { background: radial-gradient(circle at 40% 40%, #fecaca, #ef4444, #b91c1c); box-shadow: 0 0 30px 8px rgba(239, 68, 68, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #dc2626; }
+        .comp-lamp.active .lamp-bulb.color-yellow { background: radial-gradient(circle at 40% 40%, #fef08a, #eab308, #a16207); box-shadow: 0 0 30px 8px rgba(234, 179, 8, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #d97706; }
 
         /* 6. 3-Phase Motor */
         .comp-motor {
             width: 150px; height: 185px; position: relative; display: flex; flex-direction: column; align-items: center;
         }
         .motor-body {
-            width: 120px; height: 120px; border-radius: 50%; background: #94a3b8;
-            border: 4px solid #475569; position: relative; display: flex; justify-content: center; align-items: center;
-            box-shadow: inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5), 0 10px 15px rgba(0,0,0,0.4);
+            width: 124px; height: 124px; border-radius: 50%; 
+            background: radial-gradient(circle at 30% 30%, #94a3b8, #475569);
+            border: 4px solid #1e293b; position: relative; display: flex; justify-content: center; align-items: center;
+            box-shadow: inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3), 0 12px 20px rgba(0,0,0,0.4);
             overflow: hidden;
             transition: box-shadow 0.3s, border-color 0.3s;
         }
-        .motor-label { font-size: 32px; font-weight: 900; color: #1e293b; text-shadow: 1px 1px 2px rgba(255,255,255,0.5); z-index: 3; }
+        .motor-label { font-size: 34px; font-weight: 900; font-family:'Inter', sans-serif; color: #0f172a; text-shadow: 1px 1px 2px rgba(255,255,255,0.4); z-index: 3; }
         .motor-rotor {
-            position: absolute; width: 84%; height: 84%; border-radius: 50%;
-            border: 8px dashed rgba(0,0,0,0.15); transition: transform 0.2s;
+            position: absolute; width: 82%; height: 82%; border-radius: 50%;
+            border: 10px dashed rgba(15,23,42,0.15); transition: transform 0.2s;
             z-index: 2;
         }
         .motor-terminal-box {
-            width: 110px; height: 60px; background: #64748b; border: 2px solid #334155;
-            border-radius: 4px 4px 0 0; position: relative; margin-bottom: -10px; z-index: 4;
+            width: 110px; height: 60px; 
+            background: linear-gradient(180deg, #475569, #334155); 
+            border: 2px solid #0f172a; border-bottom: none;
+            border-radius: 6px 6px 0 0; position: relative; margin-bottom: -8px; z-index: 4;
             display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; gap: 6px;
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.2);
         }
         
         /* Active Motor States */
         .comp-motor.spin-fwd .motor-body {
             border-color: #22c55e;
-            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6), inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5);
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3);
         }
         .comp-motor.spin-rev .motor-body {
             border-color: #ef4444;
-            box-shadow: 0 0 25px rgba(239, 68, 68, 0.6), inset -5px -5px 15px rgba(0,0,0,0.3), inset 5px 5px 15px rgba(255,255,255,0.5);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4), inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3);
         }
-        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 10px; animation: spin 0.25s linear infinite; filter: drop-shadow(0 0 4px #22c55e); }
-        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 10px; animation: spin-rev 0.25s linear infinite; filter: drop-shadow(0 0 4px #ef4444); }
+        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 12px; animation: spin 0.2s linear infinite; filter: drop-shadow(0 0 6px #22c55e); }
+        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 12px; animation: spin-rev 0.2s linear infinite; filter: drop-shadow(0 0 6px #ef4444); }
         
-        /* Motor indicators */
         .motor-load-gauge {
-            width: 130px; background: rgba(15, 23, 42, 0.85); color: #22c55e;
-            font-family: monospace; font-size: 9px; border-radius: 4px; padding: 2px 4px;
-            text-align: center; margin-top: 4px; border: 1px solid #334155; z-index: 10;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
+            width: 130px; background: rgba(2, 6, 23, 0.9); color: #4ade80;
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 3px 4px;
+            text-align: center; margin-top: 6px; border: 1px solid #334155; z-index: 10;
+            box-shadow: inset 0 0 8px rgba(0,0,0,1), 0 2px 4px rgba(0,0,0,0.3);
+            letter-spacing: 0.5px;
         }
-        .motor-load-gauge.overloaded { color: #ef4444; border-color: #ef4444; text-shadow: 0 0 5px #ef4444; animation: flash-gauge 0.5s infinite alternate; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 0 5px rgba(0,0,0,0.8); }
+        .motor-load-gauge.overloaded { color: #f87171; border-color: #ef4444; text-shadow: 0 0 5px #ef4444; animation: flash-gauge 0.4s infinite alternate; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), inset 0 0 8px rgba(0,0,0,1); }
 
-        .speed-indicator.bg-green-600 { box-shadow: 0 0 10px rgba(34, 197, 94, 0.8); }
-        .speed-indicator.bg-red-600 { box-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
-
-        @keyframes flash-gauge { 0% { opacity: 0.8; } 100% { opacity: 1; } }
+        .speed-indicator.bg-green-600 { box-shadow: 0 0 12px rgba(34, 197, 94, 0.8); }
+        .speed-indicator.bg-red-600 { box-shadow: 0 0 12px rgba(239, 68, 68, 0.8); }
 
         /* 7. 3-Phase Breaker (MCCB) */
         .comp-breaker3p {
-            width: 130px; height: 190px; background: #f8fafc; border: 2px solid #cbd5e1;
-            border-radius: 6px; position: relative; box-shadow: 2px 4px 8px rgba(0,0,0,0.2);
+            width: 130px; height: 190px; 
+            background: linear-gradient(180deg, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
         }
         .breaker3p-switch-container {
-            width: 44px; height: 60px; background: #334155; border: 2px solid #1e293b;
-            border-radius: 2px; position: absolute; top: 65px; left: 41px;
+            width: 46px; height: 64px; background: #1e293b; border: 2px solid #0f172a;
+            border-radius: 4px; position: absolute; top: 63px; left: 40px;
             display: flex; justify-content: center; align-items: center; overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.8);
         }
         .breaker3p-handle {
-            width: 30px; height: 30px; background: #111; border-radius: 2px; cursor: pointer;
-            box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 6px rgba(0,0,0,0.5);
-            transition: transform 0.1s, background 0.2s, box-shadow 0.2s; position: relative; z-index: 2;
+            width: 32px; height: 32px; 
+            background: linear-gradient(to bottom, #475569, #1e293b); 
+            border-radius: 3px; cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.6);
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s; position: relative; z-index: 2;
         }
-        .breaker3p-bg-on { position: absolute; top: 4px; color: #ef4444; font-size: 10px; font-weight: bold; }
-        .breaker3p-bg-off { position: absolute; bottom: 4px; color: #22c55e; font-size: 10px; font-weight: bold; }
+        .breaker3p-bg-on { position: absolute; top: 5px; color: #ef4444; font-size: 11px; font-weight: 900; }
+        .breaker3p-bg-off { position: absolute; bottom: 5px; color: #22c55e; font-size: 11px; font-weight: 900; }
         .comp-breaker3p.on .breaker3p-handle { 
-            transform: translateY(-12px); 
-            background: #22c55e;
-            box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), 0 4px 10px rgba(34, 197, 94, 0.8);
+            transform: translateY(-14px); 
+            background: linear-gradient(to bottom, #22c55e, #16a34a);
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), 0 4px 12px rgba(34, 197, 94, 0.6);
+            border-top: 1px solid #86efac;
         }
-        .comp-breaker3p.off .breaker3p-handle { transform: translateY(12px); background: #111; }
-        
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-        @keyframes spin-rev { 100% { transform: rotate(-360deg); } }
+        .comp-breaker3p.off .breaker3p-handle { transform: translateY(14px); border-bottom: 1px solid #0f172a; }
 
         /* 8. Timer Relay */
         .comp-timer {
-            width: 140px; height: 180px; background: #f8fafc; border: 2px solid #cbd5e1;
-            border-radius: 6px; position: relative; box-shadow: 2px 4px 8px rgba(0,0,0,0.2);
+            width: 140px; height: 180px; 
+            background: linear-gradient(180deg, #f8fafc, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
         }
         .timer-dial-bg {
             position: absolute; top: 40px; left: 28px; width: 80px; height: 80px;
-            border-radius: 50%; background: #e2e8f0; border: 2px solid #94a3b8;
+            border-radius: 50%; background: #f1f5f9; border: 2px solid #94a3b8;
             display: flex; justify-content: center; align-items: center;
-            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1), 0 2px 4px rgba(255,255,255,1);
         }
         .timer-dial-knob {
-            width: 56px; height: 56px; border-radius: 50%; background: #334155;
+            width: 58px; height: 58px; border-radius: 50%; 
+            background: linear-gradient(135deg, #475569, #1e293b);
             position: relative; transition: transform 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4), inset 1px 1px 2px rgba(255,255,255,0.2);
+            border: 1px solid #0f172a;
         }
         .timer-dial-knob::after {
-            content: ''; position: absolute; top: 4px; left: 26px; width: 4px; height: 16px;
-            background: #f8fafc; border-radius: 2px;
+            content: ''; position: absolute; top: 4px; left: 27px; width: 4px; height: 18px;
+            background: #f8fafc; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.5);
         }
-        .timer-led { width: 10px; height: 10px; border-radius: 50%; background: #64748b; border: 1px solid #475569; transition: all 0.2s; }
-        .timer-led.on { background: #22c55e; box-shadow: 0 0 8px #22c55e; border-color: #15803d; }
-        .timer-led.up { background: #ef4444; box-shadow: 0 0 8px #ef4444; border-color: #b91c1c; }
-
-        /* --- Explosion Effects --- */
-        @keyframes shake-violent {
-            0% { transform: translate(1px, 1px) rotate(0deg); }
-            10% { transform: translate(-3px, -4px) rotate(-1deg); }
-            20% { transform: translate(-5px, 0px) rotate(2deg); }
-            30% { transform: translate(5px, 4px) rotate(0deg); }
-            40% { transform: translate(3px, -3px) rotate(2deg); }
-            50% { transform: translate(-3px, 4px) rotate(-2deg); }
-            60% { transform: translate(-5px, 2px) rotate(0deg); }
-            70% { transform: translate(5px, 2px) rotate(-1deg); }
-            80% { transform: translate(-3px, -3px) rotate(2deg); }
-            90% { transform: translate(3px, 4px) rotate(0deg); }
-            100% { transform: translate(1px, -4px) rotate(-1deg); }
-        }
-        .shake-effect {
-            animation: shake-violent 0.4s cubic-bezier(.36,.07,.19,.97) both;
-            animation-iteration-count: 2;
-        }
-        #explosion-overlay {
-            background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,100,0,0.8) 30%, rgba(50,0,0,0.9) 100%);
-            animation: flash 0.3s ease-out;
-        }
-        @keyframes flash {
-            0% { opacity: 0; }
-            30% { opacity: 1; }
-            100% { opacity: 1; }
+        
+        /* Modern Utilities */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
     </style>
@@ -387,101 +413,97 @@
 <body class="min-h-screen w-full flex flex-col h-screen">
 
     <!-- Auth Overlay -->
-    <div id="authOverlay" class="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-white rounded-[30px] p-8 max-w-md w-full shadow-2xl border-4 border-slate-200">
+    <div id="authOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white/95 backdrop-blur-xl rounded-[24px] p-8 max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/40">
             <div class="text-center mb-6">
-                <div class="w-20 h-20 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner border-4 border-white">
+                <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-[0_10px_20px_rgba(59,130,246,0.3)] border-4 border-white">
                     <i class="fas fa-plug"></i>
                 </div>
-                <h2 class="text-2xl font-black text-slate-800">วงจรควบคุมมอเตอร์</h2>
-                <p class="text-sm text-gray-500 mt-1">กรุณาล็อกอินด้วยบัญชีนักเรียน (KidLearning)</p>
+                <h2 class="text-2xl font-black text-slate-800 tracking-tight">วงจรควบคุมมอเตอร์</h2>
+                <p class="text-sm text-slate-500 mt-1 font-medium">กรุณาล็อกอินด้วยบัญชีนักเรียน</p>
             </div>
-            <form id="loginFormSim" class="space-y-3">
-                <input type="email" id="loginEmailSim" required class="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-2xl outline-none transition font-medium" placeholder="อีเมล">
-                <input type="password" id="loginPasswordSim" required class="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-2xl outline-none transition font-medium" placeholder="รหัสผ่าน">
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition shadow-lg flex justify-center items-center gap-2">
+            <form id="loginFormSim" class="space-y-4">
+                <input type="email" id="loginEmailSim" required class="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl outline-none transition font-medium text-slate-700" placeholder="อีเมล">
+                <input type="password" id="loginPasswordSim" required class="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl outline-none transition font-medium text-slate-700" placeholder="รหัสผ่าน">
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl transition shadow-[0_8px_15px_rgba(59,130,246,0.3)] flex justify-center items-center gap-2 transform active:scale-[0.98]">
                     <i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบจำลอง
                 </button>
                 
                 <div class="relative flex items-center py-2">
-                    <div class="flex-grow border-t border-gray-300"></div>
-                    <span class="flex-shrink-0 mx-4 text-gray-400 text-xs">หรือ</span>
-                    <div class="flex-grow border-t border-gray-300"></div>
+                    <div class="flex-grow border-t border-slate-200"></div>
+                    <span class="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-wider">หรือ</span>
+                    <div class="flex-grow border-t border-slate-200"></div>
                 </div>
                 
-                <!-- Guest Login Button -->
-                <button type="button" id="btnGuestLogin" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-2xl border-2 border-slate-200 transition flex justify-center items-center gap-2">
-                    <i class="fas fa-eye"></i> ทดลองใช้งาน (อ่านเท่านั้น)
+                <button type="button" id="btnGuestLogin" class="w-full bg-white hover:bg-slate-50 text-slate-600 font-bold py-3.5 rounded-xl border border-slate-200 transition flex justify-center items-center gap-2 shadow-sm transform active:scale-[0.98]">
+                    <i class="fas fa-eye text-slate-400"></i> ทดลองใช้งาน (อ่านเท่านั้น)
                 </button>
             </form>
-            <div id="loginMsg" class="mt-4 text-center text-sm font-bold text-red-500 hidden bg-red-50 py-2 rounded-xl border border-red-100"></div>
+            <div id="loginMsg" class="mt-4 text-center text-sm font-bold text-red-500 hidden bg-red-50 py-3 rounded-xl border border-red-100"></div>
         </div>
     </div>
 
     <!-- Top Header -->
-    <header class="h-14 bg-slate-800 border-b border-slate-900 flex items-center justify-between px-6 shadow-md z-[60] shrink-0 w-full text-white">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-blue-500 rounded flex items-center justify-center font-bold text-xl shadow-inner border border-blue-400">M</div>
-            <h1 class="text-lg font-bold tracking-wide hidden sm:block">จำลองวงจรควบคุมมอเตอร์ไฟฟ้า <span class="text-xs font-normal text-slate-400">Electrical Simulator</span></h1>
-        </div>
+    <header class="h-16 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/50 flex items-center justify-between px-6 shadow-lg z-[60] shrink-0 w-full text-white">
         <div class="flex items-center gap-4">
+            <div class="w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-300/50">M</div>
+            <h1 class="text-lg font-bold tracking-wide hidden sm:flex flex-col leading-tight">
+                จำลองวงจรควบคุมมอเตอร์ไฟฟ้า 
+                <span class="text-[10px] font-medium text-blue-300 uppercase tracking-widest">Electrical Simulator Pro</span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-3 md:gap-4">
             
-            <!-- Admin Button -->
-            <button onclick="openAdminPanel()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 rounded transition text-sm flex items-center gap-1 shadow-md" title="การจัดการระบบ (Admin)">
+            <button onclick="openAdminPanel()" class="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 rounded-lg transition text-sm flex items-center gap-2 shadow-sm font-medium" title="การจัดการระบบ (Admin)">
                 <i class="fas fa-user-shield"></i><span class="hidden md:inline"> Admin</span>
             </button>
-            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
 
-            <!-- User Profile Display -->
-            <div id="userProfileBadge" class="hidden items-center gap-2 bg-slate-700 px-3 py-1.5 rounded border border-slate-600">
-                <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs shadow-inner"><i class="fas fa-user text-white"></i></div>
+            <div id="userProfileBadge" class="hidden items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-600/50 backdrop-blur-sm">
+                <div class="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-xs shadow-inner"><i class="fas fa-user text-white"></i></div>
                 <span id="userNameDisplay" class="text-xs font-semibold text-slate-200 truncate max-w-[100px] md:max-w-[150px]">ผู้ใช้</span>
-                <div class="h-4 w-px bg-slate-500 mx-1"></div>
+                <div class="h-4 w-px bg-slate-600 mx-1"></div>
                 <button onclick="logoutUser()" class="text-xs text-red-400 hover:text-red-300 transition font-bold" title="ออกจากระบบ">ออก</button>
             </div>
             
-            <div class="h-6 w-px bg-slate-600 mx-1 hidden md:block"></div>
+            <div class="h-6 w-px bg-slate-700 mx-1 hidden md:block"></div>
 
-            <!-- Wires Color -->
-            <div class="hidden lg:flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded border border-slate-600">
-                <span class="text-xs font-semibold text-slate-300">สีสาย:</span>
-                <select id="wire-color-select" class="text-sm bg-slate-600 text-white border-none rounded outline-none cursor-pointer">
-                    <option value="#ef4444">แดง (L)</option>
-                    <option value="#3b82f6">น้ำเงิน (N)</option>
-                    <option value="#8b5cf6">ม่วง (L1)</option>
-                    <option value="#10b981">เขียว (L2)</option>
-                    <option value="#f59e0b">เหลือง (L3)</option>
-                    <option value="#111111">ดำ (ทั่วไป)</option>
+            <div class="hidden lg:flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-600/50 backdrop-blur-sm">
+                <span class="text-xs font-semibold text-slate-400">สีสาย:</span>
+                <select id="wire-color-select" class="text-sm bg-transparent text-white border-none outline-none cursor-pointer font-medium">
+                    <option value="#ef4444" class="bg-slate-800">🔴 แดง (L)</option>
+                    <option value="#3b82f6" class="bg-slate-800">🔵 น้ำเงิน (N)</option>
+                    <option value="#8b5cf6" class="bg-slate-800">🟣 ม่วง (L1)</option>
+                    <option value="#10b981" class="bg-slate-800">🟢 เขียว (L2)</option>
+                    <option value="#f59e0b" class="bg-slate-800">🟡 เหลือง (L3)</option>
+                    <option value="#1e293b" class="bg-slate-800">⚫ ดำ (ทั่วไป)</option>
                 </select>
             </div>
             
-            <!-- Wire hint / Snap instructions -->
-            <div class="text-[10px] text-slate-300 bg-slate-900/50 px-2 py-1 rounded hidden lg:block border border-slate-700">
-                💡 ระบบลากสายไฟแบบ Snap: คลิกขั้วเริ่มต้น → คลิกที่ว่างเพื่อหักมุมได้อิสระ → คลิกขั้วปลายทางเพื่อเชื่อมต่อทันที (กด ESC เพื่อยกเลิก)
+            <div class="text-[10px] text-blue-200 bg-blue-900/30 px-3 py-1.5 rounded-lg hidden xl:block border border-blue-500/20 font-medium">
+                <i class="fas fa-info-circle mr-1"></i> ระบบลากสาย Snap: คลิกขั้วเริ่ม → คลิกหักมุมอิสระ → คลิกขั้วปลาย (ESC เพื่อยกเลิก)
             </div>
 
-            <!-- Tools -->
             <div id="top-actions" class="flex items-center gap-2 hidden">
-                <button id="btn-top-delete" class="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-500/50 rounded hover:bg-red-600 hover:text-white transition text-sm flex items-center gap-1" title="ลบอุปกรณ์ (Delete)">
+                <button id="btn-top-delete" class="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500 hover:text-white transition text-sm flex items-center gap-2 font-medium">
                     <i class="fas fa-trash-alt"></i> ลบ
                 </button>
             </div>
 
-            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
 
-            <!-- Save / Load / Sound Toggle Files -->
-            <button id="btn-sound-toggle" onclick="SoundEngine.toggleMute()" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center justify-center w-9" title="เปิด/ปิดเสียง (Sound)">
+            <button id="btn-sound-toggle" onclick="SoundEngine.toggleMute()" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="เปิด/ปิดเสียง (Sound)">
                 <i class="fas fa-volume-up" id="icon-sound"></i>
             </button>
-            <div class="h-6 w-px bg-slate-600 mx-1"></div>
-            <button id="btn-save" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 rounded transition text-sm flex items-center gap-1" title="บันทึกวงจรลงไฟล์ .txt (Save)"><i class="fas fa-save"></i><span class="hidden md:inline"> Save</span></button>
-            <button id="btn-load-trigger" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-500 rounded transition text-sm flex items-center gap-1" title="เปิดไฟล์วงจร (Load)"><i class="fas fa-folder-open"></i><span class="hidden md:inline"> Load</span></button>
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
+            <button id="btn-save" class="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 rounded-lg transition text-sm flex items-center gap-2 font-medium" title="บันทึกวงจรลงไฟล์ .txt"><i class="fas fa-save"></i><span class="hidden md:inline"> Save</span></button>
+            <button id="btn-load-trigger" class="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border border-blue-500/30 rounded-lg transition text-sm flex items-center gap-2 font-medium" title="เปิดไฟล์วงจร"><i class="fas fa-folder-open"></i><span class="hidden md:inline"> Load</span></button>
             <input type="file" id="file-input" class="hidden" accept=".txt,.json">
             
-            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
             
-            <button id="btn-undo" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center gap-1" title="ย้อนกลับ (Ctrl+Z)"><i class="fas fa-undo"></i></button>
-            <button id="btn-reset" class="px-3 py-1.5 bg-slate-700 text-white border border-slate-600 rounded hover:bg-slate-600 transition text-sm flex items-center gap-1" title="เริ่มใหม่"><i class="fas fa-redo"></i></button>
+            <button id="btn-undo" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="ย้อนกลับ (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+            <button id="btn-reset" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="เริ่มใหม่"><i class="fas fa-redo"></i></button>
         </div>
     </header>
 
@@ -490,107 +512,106 @@
         
         <!-- Explosion Overlay -->
         <div id="explosion-overlay" class="absolute inset-0 z-[100] hidden flex-col items-center justify-center pointer-events-none">
-            <div class="text-[150px] mb-2 leading-none drop-shadow-[0_0_20px_rgba(255,255,255,0.8)]">💥</div>
-            <h1 class="text-7xl font-black text-white drop-shadow-[0_5px_10px_rgba(200,0,0,1)] uppercase tracking-wider text-center">Short Circuit!</h1>
-            <h2 id="explosion-reason" class="text-3xl font-bold text-yellow-300 drop-shadow-[0_2px_5px_rgba(0,0,0,1)] mt-6 bg-black/60 border-2 border-red-500 px-8 py-3 rounded-full"></h2>
-            <p class="text-white mt-4 font-bold bg-red-600 px-4 py-1 rounded">เบรกเกอร์ทริปอัตโนมัติ (Breaker Tripped)</p>
+            <div class="text-[150px] mb-2 leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.9)]">💥</div>
+            <h1 class="text-7xl font-black text-white drop-shadow-[0_5px_15px_rgba(220,38,38,1)] uppercase tracking-wider text-center">Short Circuit!</h1>
+            <h2 id="explosion-reason" class="text-2xl font-bold text-yellow-300 drop-shadow-[0_2px_5px_rgba(0,0,0,1)] mt-6 bg-black/80 backdrop-blur border border-red-500/50 px-8 py-4 rounded-2xl shadow-2xl"></h2>
+            <p class="text-white mt-4 font-bold bg-gradient-to-r from-red-600 to-red-700 px-5 py-2 rounded-lg shadow-lg border border-red-400">เบรกเกอร์ทริปอัตโนมัติ (Breaker Tripped)</p>
         </div>
 
         <!-- Left Menu: Component Library -->
-        <aside class="w-64 bg-white border-r border-slate-200 shadow-lg z-20 flex flex-col shrink-0 relative">
-            <div class="p-3 bg-slate-100 border-b border-slate-200 font-bold text-slate-700 text-sm flex justify-between items-center">
-                คลังอุปกรณ์ (Components)
+        <aside class="w-64 bg-slate-50 border-r border-slate-200/80 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20 flex flex-col shrink-0 relative">
+            <div class="p-4 bg-white border-b border-slate-200/80 font-bold text-slate-800 text-sm flex justify-between items-center shadow-sm">
+                <span><i class="fas fa-toolbox text-blue-500 mr-2"></i> คลังอุปกรณ์</span>
             </div>
             
-            <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+            <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
                 <!-- Main Breaker Box -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'mainbox')" onclick="spawnComponent('mainbox')">
-                    <div class="w-8 h-8 bg-slate-200 border border-slate-400 rounded-sm flex items-center justify-center relative">
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'mainbox')" onclick="spawnComponent('mainbox')">
+                    <div class="w-9 h-9 bg-gradient-to-br from-slate-200 to-slate-300 border border-slate-400 rounded flex items-center justify-center relative shadow-inner">
                         <div class="w-3 h-4 bg-slate-700 rounded-sm"></div>
-                        <div class="absolute bottom-1 w-6 h-1 bg-green-500"></div>
+                        <div class="absolute bottom-1 w-6 h-1 bg-green-500 rounded-full"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700 leading-tight">ตู้เมนไฟฟ้า (MDB)<br><span class="text-[10px] text-slate-500">Breaker 3P + N + PE</span></div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight">ตู้เมนไฟฟ้า (MDB)<br><span class="text-[10px] text-slate-400 font-medium">3P + N + PE</span></div>
                 </div>
 
                 <!-- 3 Phase Breaker (MCCB) -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'breaker3p')" onclick="spawnComponent('breaker3p')">
-                    <div class="w-6 h-8 bg-white border border-slate-400 rounded-sm flex flex-col justify-center items-center relative">
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'breaker3p')" onclick="spawnComponent('breaker3p')">
+                    <div class="w-7 h-9 bg-gradient-to-b from-white to-slate-100 border border-slate-300 rounded flex flex-col justify-center items-center relative shadow-sm">
                         <div class="w-3 h-4 bg-slate-800 rounded-sm"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700 leading-tight">เบรกเกอร์ 3 เฟส<br><span class="text-[10px] text-slate-500">MCCB 100A</span></div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight">เบรกเกอร์ 3 เฟส<br><span class="text-[10px] text-slate-400 font-medium">MCCB 100A</span></div>
                 </div>
 
                 <!-- Magnetic Contactor -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'contactor')" onclick="spawnComponent('contactor')">
-                    <div class="w-6 h-8 bg-[#e8e6dd] border border-slate-400 rounded-sm flex flex-col justify-between items-center py-1 relative">
-                        <div class="w-4 h-1 bg-slate-400"></div>
-                        <div class="w-3 h-3 bg-gray-800 rounded-sm"></div>
-                        <div class="w-4 h-1 bg-slate-400"></div>
-                        <div class="absolute left-0 top-3 w-1.5 h-2 bg-blue-500"></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'contactor')" onclick="spawnComponent('contactor')">
+                    <div class="w-7 h-9 bg-gradient-to-b from-slate-50 to-slate-200 border border-slate-300 rounded flex flex-col justify-between items-center py-1 relative shadow-sm">
+                        <div class="w-4 h-1 bg-slate-400 rounded-full"></div>
+                        <div class="w-3 h-3 bg-slate-800 rounded-sm shadow-inner"></div>
+                        <div class="w-4 h-1 bg-slate-400 rounded-full"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">Magnetic Contactor<br><span class="text-[10px] text-slate-500">S-N10</span></div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight">แมกเนติก<br><span class="text-[10px] text-slate-400 font-medium">Contactor S-N10</span></div>
                 </div>
 
                 <!-- Thermal Overload Relay -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'overload')" onclick="spawnComponent('overload')">
-                    <div class="w-6 h-8 bg-[#2f3542] border border-slate-600 rounded-sm flex flex-col justify-between items-center py-1 relative">
-                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
-                        <div class="w-3 h-3 bg-blue-500 rounded-sm"></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'overload')" onclick="spawnComponent('overload')">
+                    <div class="w-7 h-9 bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-600 rounded flex flex-col justify-between items-center py-1.5 relative shadow-sm">
+                        <div class="w-3 h-3 bg-red-500 rounded-full shadow-inner"></div>
+                        <div class="w-3 h-3 bg-blue-500 rounded-sm shadow-inner"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">Overload Relay<br><span class="text-[10px] text-slate-500">TH-N12 Thermal</span></div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight">โอเวอร์โหลด<br><span class="text-[10px] text-slate-400 font-medium">TH-N12 Relay</span></div>
                 </div>
 
                 <!-- Push Button NO -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'button_no')" onclick="spawnComponent('button_no')">
-                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded-sm flex items-center justify-center">
-                        <div class="w-4 h-4 bg-green-500 rounded-full shadow-sm"></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'button_no')" onclick="spawnComponent('button_no')">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-4 h-4 bg-gradient-to-br from-green-400 to-green-600 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.2),0_2px_4px_rgba(0,0,0,0.1)]"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">สวิตช์ Start (NO/NC)</div>
+                    <div class="text-sm font-semibold text-slate-700">สวิตช์ Start <span class="text-[10px] text-green-500">(NO)</span></div>
                 </div>
 
                 <!-- Push Button NC -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'button_nc')" onclick="spawnComponent('button_nc')">
-                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded-sm flex items-center justify-center">
-                        <div class="w-4 h-4 bg-red-500 rounded-full shadow-sm"></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'button_nc')" onclick="spawnComponent('button_nc')">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-4 h-4 bg-gradient-to-br from-red-400 to-red-600 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.2),0_2px_4px_rgba(0,0,0,0.1)]"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">สวิตช์ Stop (NO/NC)</div>
+                    <div class="text-sm font-semibold text-slate-700">สวิตช์ Stop <span class="text-[10px] text-red-500">(NC)</span></div>
                 </div>
 
                 <!-- 3 Phase Motor -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'motor')" onclick="spawnComponent('motor')">
-                    <div class="w-8 h-8 rounded-full bg-slate-400 border border-slate-600 flex items-center justify-center text-white font-bold text-xs">M</div>
-                    <div class="text-sm font-medium text-slate-700">มอเตอร์ 3 เฟส</div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'motor')" onclick="spawnComponent('motor')">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center text-white font-black text-sm shadow-sm">M</div>
+                    <div class="text-sm font-semibold text-slate-700">มอเตอร์ 3 เฟส</div>
                 </div>
 
                 <!-- Pilot Lamp -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'lamp')" onclick="spawnComponent('lamp')">
-                    <div class="w-6 h-6 bg-slate-100 border border-slate-300 rounded flex items-center justify-center">
-                        <div class="w-4 h-4 bg-yellow-300 rounded-full shadow-sm border border-yellow-500"></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'lamp')" onclick="spawnComponent('lamp')">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-5 h-5 bg-gradient-to-br from-yellow-200 to-yellow-400 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.1),0_2px_6px_rgba(234,179,8,0.4)] border border-yellow-500"></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">หลอดไฟสัญญาณ (Lamp)</div>
+                    <div class="text-sm font-semibold text-slate-700">ไฟสัญญาณ (Lamp)</div>
                 </div>
 
                 <!-- Timer Relay -->
-                <div class="component-item p-2 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition flex items-center gap-3" draggable="true" ondragstart="menuDragStart(event, 'timer')" onclick="spawnComponent('timer')">
-                    <div class="w-6 h-8 bg-slate-100 border border-slate-400 rounded-sm flex flex-col items-center py-1 gap-1">
-                        <div class="w-4 h-4 rounded-full border border-slate-400 bg-slate-200 flex items-center justify-center"><div class="w-1 h-2 bg-slate-500 rounded-sm"></div></div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" draggable="true" ondragstart="menuDragStart(event, 'timer')" onclick="spawnComponent('timer')">
+                    <div class="w-7 h-9 bg-gradient-to-b from-slate-50 to-slate-100 border border-slate-300 rounded flex flex-col items-center py-1.5 gap-1 shadow-sm">
+                        <div class="w-4 h-4 rounded-full border border-slate-400 bg-white flex items-center justify-center shadow-inner"><div class="w-0.5 h-1.5 bg-slate-600 rounded-sm"></div></div>
                     </div>
-                    <div class="text-sm font-medium text-slate-700">ทามเมอร์ (Timer)<br><span class="text-[10px] text-slate-500">On-Delay Relay</span></div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight">ทามเมอร์ (Timer)<br><span class="text-[10px] text-slate-400 font-medium">On-Delay</span></div>
                 </div>
 
-                <div class="mt-4 p-3 bg-red-50 rounded border border-red-100 text-[11px] text-red-800 leading-relaxed">
-                    <strong>⚠️ คำเตือนความปลอดภัย:</strong><br>
-                    ระวังการต่อสายไฟช็อตถึงกัน หากมีการต่อลัดวงจร (Short Circuit) โดยไม่ผ่านโหลด เบรกเกอร์จะทริปและเกิดระเบิดทันที!
+                <div class="mt-2 p-3 bg-red-50/80 rounded-xl border border-red-200/60 text-[10px] text-red-700 leading-relaxed font-medium">
+                    <strong class="text-red-600 block mb-1"><i class="fas fa-exclamation-triangle"></i> คำเตือนความปลอดภัย</strong>
+                    ระวังการต่อสายไฟลัดวงจร (Short Circuit) โดยไม่ผ่านโหลด เบรกเกอร์จะทริปและเกิดระเบิดจำลองทันที!
                 </div>
             </div>
 
             <!-- Properties Panel -->
-            <div id="properties-panel" class="hidden flex-col border-t border-slate-200 bg-white shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <div class="p-2 border-b bg-slate-100 font-semibold text-slate-700 flex justify-between items-center text-sm">
-                    <span>ตั้งค่าอุปกรณ์</span>
-                    <button onclick="deselectElement()" class="text-slate-400 hover:text-red-500 text-lg leading-none">&times;</button>
+            <div id="properties-panel" class="hidden flex-col border-t border-slate-200 bg-white/95 backdrop-blur shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] rounded-t-2xl z-30 transition-all">
+                <div class="p-3 border-b border-slate-100 font-bold text-slate-800 flex justify-between items-center text-sm">
+                    <span class="flex items-center gap-2"><i class="fas fa-sliders-h text-blue-500"></i> ตั้งค่าอุปกรณ์</span>
+                    <button onclick="deselectElement()" class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition"><i class="fas fa-times"></i></button>
                 </div>
-                <div class="p-3 flex flex-col gap-2 text-sm" id="properties-content">
+                <div class="p-4 flex flex-col gap-3 text-sm" id="properties-content">
                     <!-- JS Injected Properties -->
                 </div>
             </div>
@@ -606,76 +627,79 @@
         </section>
         
         <!-- Status Log Overlay (Bottom Right) -->
-        <div class="absolute bottom-4 right-4 w-80 bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-xl z-50 flex flex-col max-h-[250px]">
-            <div class="px-3 py-2 bg-slate-800 text-white text-xs font-bold rounded-t-lg flex justify-between items-center">
-                <span>System Log</span>
-                <button onclick="document.getElementById('sys-log').innerHTML=''" class="text-slate-400 hover:text-white">Clear</button>
+        <div class="absolute bottom-6 right-6 w-80 glass-panel rounded-xl shadow-2xl z-50 flex flex-col max-h-[250px] overflow-hidden">
+            <div class="px-4 py-2.5 bg-white/10 text-white text-xs font-bold border-b border-white/10 flex justify-between items-center">
+                <span class="flex items-center gap-2"><i class="fas fa-terminal text-blue-400"></i> System Log</span>
+                <button onclick="document.getElementById('sys-log').innerHTML=''" class="text-slate-400 hover:text-white transition">Clear</button>
             </div>
-            <div id="sys-log" class="p-2 overflow-y-auto text-[11px] font-mono text-slate-700 flex-1 space-y-1">
+            <div id="sys-log" class="p-3 overflow-y-auto text-[11px] font-mono text-slate-300 flex-1 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-600">
                 <!-- Logs here -->
             </div>
         </div>
     </main>
 
     <!-- Stats Bar (Floating Bottom Center) -->
-    <div id="stats-bar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-[#4c4440] text-white px-5 py-2.5 rounded-full flex items-center gap-3 sm:gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.5)] z-[100] text-[11px] sm:text-xs font-bold border border-[#5d5652] whitespace-nowrap tracking-wide">
+    <div id="stats-bar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 glass-panel text-white px-6 py-3 rounded-2xl flex items-center gap-4 sm:gap-6 shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-[100] text-[11px] sm:text-xs font-bold whitespace-nowrap tracking-wide">
         <!-- Visitors -->
         <div class="flex items-center gap-2">
-            <i class="fas fa-users text-[#5b9ee5] text-sm"></i>
-            <span class="text-slate-200">ผู้เข้าชมสะสม: <span id="stat-visitors" class="text-white text-[13px]">...</span></span>
+            <div class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center"><i class="fas fa-users text-blue-400 text-sm"></i></div>
+            <span class="text-slate-300 font-medium">เข้าชม: <span id="stat-visitors" class="text-white text-[13px] font-bold">...</span></span>
         </div>
-        <div class="w-[2px] h-3 bg-[#6b6460] rounded"></div>
+        <div class="w-px h-5 bg-slate-600 rounded"></div>
         <!-- Online -->
         <div class="flex items-center gap-2">
-            <div class="w-2.5 h-2.5 bg-[#4ade80] rounded-full animate-pulse shadow-[0_0_8px_#4ade80]"></div>
-            <span class="text-slate-200">กำลังออนไลน์: <span id="stat-online" class="text-white text-[13px]">...</span></span>
+            <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center relative">
+                <div class="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_#4ade80]"></div>
+            </div>
+            <span class="text-slate-300 font-medium">ออนไลน์: <span id="stat-online" class="text-white text-[13px] font-bold">...</span></span>
         </div>
-        <div class="w-[2px] h-3 bg-[#6b6460] rounded"></div>
+        <div class="w-px h-5 bg-slate-600 rounded"></div>
         <!-- Members -->
-        <div class="flex items-center gap-2">
-            <i class="fas fa-user-graduate text-[#c084fc] text-sm"></i>
-            <span class="text-slate-200">สมาชิก: <span id="stat-members" class="text-white text-[13px]">...</span></span>
-            <span id="stat-new-member" class="bg-[#8b315b] text-[#fbcfe8] text-[9px] px-1.5 py-0.5 rounded-sm ml-1 hidden transition-all duration-300">+1 ใหม่</span>
+        <div class="flex items-center gap-2 relative">
+            <div class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center"><i class="fas fa-user-graduate text-purple-400 text-sm"></i></div>
+            <span class="text-slate-300 font-medium">สมาชิก: <span id="stat-members" class="text-white text-[13px] font-bold">...</span></span>
+            <span id="stat-new-member" class="absolute -top-3 -right-6 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm hidden transition-all duration-300">+1 ใหม่</span>
         </div>
     </div>
 
     <!-- Admin Panel Overlay -->
-    <div id="adminPanelOverlay" class="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[10000] hidden items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl flex flex-col max-h-[85vh]">
+    <div id="adminPanelOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[10000] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl flex flex-col max-h-[85vh] border border-slate-200">
             
             <!-- Header -->
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    <i class="fas fa-user-shield text-purple-600"></i> แผงควบคุมผู้ดูแลระบบ (Admin)
+            <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center"><i class="fas fa-user-shield"></i></div>
+                    แผงควบคุมระบบ (Admin)
                 </h2>
-                <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-red-500 text-2xl leading-none">&times;</button>
+                <button onclick="closeAdminPanel()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition"><i class="fas fa-times"></i></button>
             </div>
 
             <!-- PIN Login View -->
-            <div id="adminPinView" class="flex flex-col items-center justify-center py-10">
-                <p class="text-slate-600 mb-4 font-medium">กรุณาใส่รหัสผ่าน Admin เพื่อเข้าสู่ระบบ</p>
-                <input type="password" id="adminPinInput" class="w-64 px-4 py-3 bg-slate-50 border-2 border-slate-300 focus:border-purple-500 rounded-xl outline-none text-center text-xl tracking-widest font-bold" placeholder="PIN">
-                <button onclick="verifyAdminPin()" class="mt-4 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-lg">ยืนยัน</button>
-                <p id="adminPinError" class="text-red-500 text-sm mt-3 hidden font-bold">รหัสผ่านไม่ถูกต้อง!</p>
+            <div id="adminPinView" class="flex flex-col items-center justify-center py-12">
+                <p class="text-slate-500 mb-6 font-medium">กรุณาใส่รหัสผ่านรักษาความปลอดภัย</p>
+                <input type="password" id="adminPinInput" class="w-64 px-4 py-4 bg-slate-50 border-2 border-slate-200 focus:border-purple-500 focus:bg-white rounded-2xl outline-none text-center text-2xl tracking-[0.5em] font-black transition-all shadow-inner" placeholder="••••••">
+                <button onclick="verifyAdminPin()" class="mt-6 px-10 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl transition shadow-[0_8px_15px_rgba(147,51,234,0.3)] transform active:scale-95">ยืนยัน</button>
+                <p id="adminPinError" class="text-red-500 text-sm mt-4 hidden font-bold bg-red-50 px-4 py-2 rounded-lg border border-red-100">รหัสผ่านไม่ถูกต้อง!</p>
             </div>
 
             <!-- Dashboard View (Hidden by default) -->
             <div id="adminDashboardView" class="hidden flex-col flex-1 overflow-hidden">
                 <div class="flex justify-between items-center mb-3">
-                    <p class="text-sm text-slate-500 font-medium">รายชื่อผู้ใช้งานทั้งหมด</p>
-                    <button onclick="loadAdminUsers()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded border"><i class="fas fa-sync-alt"></i> รีเฟรช</button>
+                    <p class="text-sm text-slate-500 font-bold">รายชื่อผู้ใช้งานทั้งหมด</p>
+                    <button onclick="loadAdminUsers()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg border font-semibold transition flex items-center gap-2"><i class="fas fa-sync-alt"></i> อัปเดตข้อมูล</button>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto border rounded-xl bg-slate-50 p-2">
+                <div class="flex-1 overflow-y-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
                     <table class="w-full text-left text-sm">
-                        <thead class="bg-slate-200 text-slate-600">
+                        <thead class="bg-slate-50 text-slate-600 sticky top-0 z-10 border-b border-slate-200">
                             <tr>
-                                <th class="p-2 rounded-tl-lg">ชื่อผู้ใช้ / อีเมล</th>
-                                <th class="p-2 text-center">สถานะการอนุมัติ (ใช้งานเต็มรูปแบบ)</th>
-                                <th class="p-2 text-center rounded-tr-lg">จัดการ</th>
+                                <th class="p-3 px-4 font-bold">ชื่อผู้ใช้ / อีเมล</th>
+                                <th class="p-3 text-center font-bold">สถานะระบบ</th>
+                                <th class="p-3 text-center font-bold">จัดการสิทธิ์</th>
                             </tr>
                         </thead>
-                        <tbody id="adminUsersList" class="divide-y divide-slate-200">
+                        <tbody id="adminUsersList" class="divide-y divide-slate-100">
                             <!-- User rows will be injected here via JS -->
                         </tbody>
                     </table>
@@ -941,8 +965,8 @@
             const time = new Date().toLocaleTimeString('th-TH', { hour12: false });
             const div = document.createElement('div');
             // Check if error log
-            if(msg.includes("💥") || msg.includes("⚠️")) div.innerHTML = `<span class="text-blue-500">[${time}]</span> <span class="text-red-600 font-bold">${msg}</span>`;
-            else div.innerHTML = `<span class="text-blue-500">[${time}]</span> ${msg}`;
+            if(msg.includes("💥") || msg.includes("⚠️")) div.innerHTML = `<span class="text-red-400">[${time}]</span> <span class="text-red-400 font-bold">${msg}</span>`;
+            else div.innerHTML = `<span class="text-blue-400 font-medium">[${time}]</span> ${msg}`;
             sysLogEl.appendChild(div);
             sysLogEl.scrollTop = sysLogEl.scrollHeight;
         }
@@ -1026,7 +1050,7 @@
             if (type === 'mainbox') {
                 return `
                     <div class="comp-mainbox" data-breaker="off">
-                        <div class="absolute top-4 left-6 text-xl font-bold text-slate-700">MDB (Main Breaker Box)</div>
+                        <div class="absolute top-4 left-6 text-xl font-black text-slate-800 tracking-tight">MDB <span class="text-sm font-bold text-slate-500">Main Breaker Box</span></div>
                         <div class="box-warning">⚡</div>
                         
                         <!-- Breaker Switch -->
@@ -1042,32 +1066,32 @@
 
                         <!-- Phase Terminals (Output of breaker) -->
                         <div class="absolute top-[195px] left-[40px] w-[180px] flex justify-between">
-                            <div class="terminal terminal-lg" id="term-${compId}-L1" style="position:relative; background:#8b5cf6;" title="L1 Out"></div>
-                            <div class="terminal terminal-lg" id="term-${compId}-L2" style="position:relative; background:#10b981;" title="L2 Out"></div>
-                            <div class="terminal terminal-lg" id="term-${compId}-L3" style="position:relative; background:#f59e0b;" title="L3 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L1" style="position:relative; background:linear-gradient(135deg, #a78bfa, #8b5cf6);" title="L1 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L2" style="position:relative; background:linear-gradient(135deg, #34d399, #10b981);" title="L2 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L3" style="position:relative; background:linear-gradient(135deg, #fbbf24, #f59e0b);" title="L3 Out"></div>
                         </div>
 
                         <!-- Neutral Busbar -->
                         <div class="busbar neutral flex justify-around items-center px-8">
                             <span class="absolute -left-10 text-xl font-bold text-blue-700">N</span>
-                            <div class="terminal terminal-md" id="term-${compId}-N1" style="position:static; background:#3b82f6;" title="Neutral"></div>
-                            <div class="terminal terminal-md" id="term-${compId}-N2" style="position:static; background:#3b82f6;" title="Neutral"></div>
-                            <div class="terminal terminal-md" id="term-${compId}-N3" style="position:static; background:#3b82f6;" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N1" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N2" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N3" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
                         </div>
 
                         <!-- Ground Busbar -->
                         <div class="busbar ground flex justify-around items-center px-8">
                             <span class="absolute -left-12 text-xl font-bold text-green-700">PE</span>
-                            <div class="terminal terminal-md" id="term-${compId}-PE1" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
-                            <div class="terminal terminal-md" id="term-${compId}-PE2" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
-                            <div class="terminal terminal-md" id="term-${compId}-PE3" style="position:static; background:#22c55e;" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE1" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE2" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE3" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
                         </div>
                     </div>`;
             } 
             else if (type === 'breaker3p') {
                 return `
                     <div class="comp-breaker3p off" data-state="off">
-                        <div class="absolute top-1 text-[8px] font-bold text-slate-400 w-full text-center">MCCB</div>
+                        <div class="absolute top-1.5 text-[9px] font-black text-slate-400 tracking-widest w-full text-center">MCCB</div>
                         
                         <!-- Screws Top -->
                         <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
@@ -1080,8 +1104,8 @@
                         <div class="terminal" id="term-${compId}-L3" style="left: 95px; top: 17px;" title="L3 In"></div>
 
                         <!-- Middle Area -->
-                        <div style="position: absolute; top: 60px; left: 10px; right: 10px; height: 70px; background: #f1f5f9; border: 1px solid #cbd5e1; display:flex; align-items:center; justify-content:space-between; padding: 0 5px;">
-                            <div style="font-size: 18px; font-weight: 900; color: #94a3b8; font-family: sans-serif;">100<span style="font-size:10px;">A</span></div>
+                        <div style="position: absolute; top: 60px; left: 8px; right: 8px; height: 70px; background: linear-gradient(180deg, #f8fafc, #f1f5f9); border: 1px solid #cbd5e1; border-radius: 4px; display:flex; align-items:center; justify-content:space-between; padding: 0 5px;">
+                            <div style="font-size: 18px; font-weight: 900; color: #94a3b8; font-family: 'Inter', sans-serif;">100<span style="font-size:10px;">A</span></div>
                         </div>
 
                         <!-- Switch -->
@@ -1104,14 +1128,14 @@
             }
             else if (type === 'contactor') {
                 return `
-                    <div class="comp-contactor shadow-md">
+                    <div class="comp-contactor">
                         <div class="sn10-core-bg"></div>
                         <div class="contactor-core">
                             <div class="core-hole"></div>
                             <div class="core-hole"></div>
                         </div>
                         <div class="sn10-label">S-N10</div>
-                        <div class="absolute" style="right: 15px; top: 112px; font-size: 8px; font-weight: bold; color: #333; z-index: 3;">18.5S<br>Ith=20A</div>
+                        <div class="absolute" style="right: 15px; top: 112px; font-size: 8px; font-weight: 800; color: #64748b; z-index: 3;">18.5S<br>Ith=20A</div>
                         
                         <!-- Row 1 (Top: Main + NO) -->
                         <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
@@ -1168,7 +1192,7 @@
             }
             else if (type === 'overload') {
                 return `
-                    <div class="comp-overload shadow-md" data-tripped="false">
+                    <div class="comp-overload" data-tripped="false">
                         <div class="overload-label" style="top: 110px;">TH-N12</div>
                         <div class="overload-dial" title="ปรับตั้งพิกัดกระแส (Amps)"></div>
                         <button class="overload-trip-btn" title="คลิกเพื่อจำลองทริป (Test Trip)">TRIP</button>
@@ -1179,22 +1203,22 @@
                             <div class="thermal-bar" id="heat-bar-${compId}"></div>
                         </div>
 
-                        <div class="ov-info absolute" style="left: 12px; top: 135px; font-size: 8px; font-weight: bold; color: #94a3b8; line-height:1.2;">
+                        <div class="ov-info absolute" style="left: 12px; top: 135px; font-size: 8px; font-weight: 800; color: #64748b; line-height:1.2;">
                             RC: 9 A<br>95-96: NC<br>97-98: NO
                         </div>
 
                         <!-- Row 1 (Power Pins In - top of overload which attaches to contactor T1-T3) -->
                         <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
                         <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="Overload 1/L1 (In)"></div>
-                        <div class="sn10-text" style="left: 11px; top: 4px; color:#fff;">1/L1</div>
+                        <div class="sn10-text" style="left: 11px; top: 4px; color:#94a3b8;">1/L1</div>
 
                         <div class="terminal-plate" style="left: 50px; top: 15px;"></div>
                         <div class="terminal" id="term-${compId}-L2" style="left: 52px; top: 17px;" title="Overload 3/L2 (In)"></div>
-                        <div class="sn10-text" style="left: 46px; top: 4px; color:#fff;">3/L2</div>
+                        <div class="sn10-text" style="left: 46px; top: 4px; color:#94a3b8;">3/L2</div>
 
                         <div class="terminal-plate" style="left: 85px; top: 15px;"></div>
                         <div class="terminal" id="term-${compId}-L3" style="left: 87px; top: 17px;" title="Overload 5/L3 (In)"></div>
-                        <div class="sn10-text" style="left: 81px; top: 4px; color:#fff;">5/L3</div>
+                        <div class="sn10-text" style="left: 81px; top: 4px; color:#94a3b8;">5/L3</div>
 
                         <!-- Auxiliary Contacts NO (97, 98) & NC (95, 96) in the middle -->
                         <div class="terminal-plate" style="left: 120px; top: 48px;"></div>
@@ -1216,21 +1240,21 @@
                         <!-- Row 2 (Power Pins Out - bottom to Motor) -->
                         <div class="terminal-plate" style="left: 15px; top: 155px;"></div>
                         <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 157px;" title="Overload 2/T1 (Out)"></div>
-                        <div class="sn10-text" style="left: 11px; top: 143px; color:#fff;">2/T1</div>
+                        <div class="sn10-text" style="left: 11px; top: 143px; color:#94a3b8;">2/T1</div>
 
                         <div class="terminal-plate" style="left: 50px; top: 155px;"></div>
                         <div class="terminal" id="term-${compId}-T2" style="left: 52px; top: 157px;" title="Overload 4/T2 (Out)"></div>
-                        <div class="sn10-text" style="left: 46px; top: 143px; color:#fff;">4/T2</div>
+                        <div class="sn10-text" style="left: 46px; top: 143px; color:#94a3b8;">4/T2</div>
 
                         <div class="terminal-plate" style="left: 85px; top: 155px;"></div>
                         <div class="terminal" id="term-${compId}-T3" style="left: 87px; top: 157px;" title="Overload 6/T3 (Out)"></div>
-                        <div class="sn10-text" style="left: 81px; top: 143px; color:#fff;">6/T3</div>
+                        <div class="sn10-text" style="left: 81px; top: 143px; color:#94a3b8;">6/T3</div>
                     </div>`;
             }
             else if (type === 'button_no') {
                 return `
-                    <div class="comp-button shadow-md">
-                        <div class="absolute top-[32px] text-[10px] font-bold text-slate-500">START</div>
+                    <div class="comp-button">
+                        <div class="absolute top-[32px] text-[10px] font-black text-slate-500 tracking-widest">START</div>
                         <div class="btn-head btn-green"></div>
                         
                         <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
@@ -1246,8 +1270,8 @@
             }
             else if (type === 'button_nc') {
                 return `
-                    <div class="comp-button shadow-md">
-                        <div class="absolute top-[32px] text-[10px] font-bold text-slate-500">STOP</div>
+                    <div class="comp-button">
+                        <div class="absolute top-[32px] text-[10px] font-black text-slate-500 tracking-widest">STOP</div>
                         <div class="btn-head btn-red"></div>
                         
                         <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
@@ -1263,7 +1287,7 @@
             }
             else if (type === 'lamp') {
                 return `
-                    <div class="comp-lamp shadow-md" data-color="green">
+                    <div class="comp-lamp" data-color="green">
                         <div class="lamp-bulb color-green"></div>
                         <div class="terminal" id="term-${compId}-x1" style="left: 5px; bottom: 10px;" title="X1"></div><div class="terminal-label" style="left: 6px; bottom: -6px; font-size:8px;">X1</div>
                         <div class="terminal" id="term-${compId}-x2" style="right: 5px; bottom: 10px;" title="X2"></div><div class="terminal-label" style="right: 6px; bottom: -6px; font-size:8px;">X2</div>
@@ -1273,48 +1297,48 @@
                 return `
                     <div class="comp-motor" data-load="60">
                         <!-- Updated 6-Terminal Box + PE -->
-                        <div style="width: 110px; height: 60px; background: #64748b; border: 2px solid #334155; border-radius: 4px 4px 0 0; position: relative; margin-bottom: -10px; z-index: 4; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 4px 8px;">
+                        <div class="motor-terminal-box">
                             <!-- Top Row -->
                             <div class="flex justify-between w-full">
-                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">W2</span><div class="terminal" id="term-${compId}-W2" style="position:relative;" title="W2"></div></div>
-                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">U2</span><div class="terminal" id="term-${compId}-U2" style="position:relative;" title="U2"></div></div>
-                                <div class="relative flex flex-col items-center"><span class="text-[8px] text-white mb-0.5">V2</span><div class="terminal" id="term-${compId}-V2" style="position:relative;" title="V2"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">W2</span><div class="terminal" id="term-${compId}-W2" style="position:relative;" title="W2"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">U2</span><div class="terminal" id="term-${compId}-U2" style="position:relative;" title="U2"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">V2</span><div class="terminal" id="term-${compId}-V2" style="position:relative;" title="V2"></div></div>
                             </div>
                             <!-- Bottom Row -->
                             <div class="flex justify-between w-full">
-                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-U1" style="position:relative;" title="U1"></div><span class="text-[8px] text-white mt-0.5">U1</span></div>
-                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-V1" style="position:relative;" title="V1"></div><span class="text-[8px] text-white mt-0.5">V1</span></div>
-                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-W1" style="position:relative;" title="W1"></div><span class="text-[8px] text-white mt-0.5">W1</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-U1" style="position:relative;" title="U1"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">U1</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-V1" style="position:relative;" title="V1"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">V1</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-W1" style="position:relative;" title="W1"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">W1</span></div>
                             </div>
                             <!-- PE Terminal -->
                             <div class="absolute -right-7 top-1/2 -translate-y-1/2 flex flex-col items-center">
-                                <div class="terminal" id="term-${compId}-PE" style="position:relative; background:#22c55e;" title="PE (Ground)"></div>
+                                <div class="terminal" id="term-${compId}-PE" style="position:relative; background:linear-gradient(135deg, #4ade80, #22c55e);" title="PE (Ground)"></div>
                                 <span class="text-[8px] text-green-400 font-bold mt-0.5">PE</span>
                             </div>
                         </div>
                         <div class="motor-body">
                             <div class="motor-rotor"></div>
-                            <div class="motor-label">M<span class="text-sm align-super">3~</span></div>
+                            <div class="motor-label">M<span class="text-sm align-super text-slate-600">3~</span></div>
                         </div>
                         <div class="motor-load-gauge" id="gauge-${compId}">
                             Load: 60% | I: 0.0A
                         </div>
-                        <div class="absolute bottom-[-16px] bg-slate-800 text-white text-[9px] px-1.5 rounded-full hidden speed-indicator">STOP</div>
+                        <div class="absolute bottom-[-16px] bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full hidden speed-indicator shadow-md">STOP</div>
                     </div>`;
             }
             else if (type === 'timer') {
                 return `
-                    <div class="comp-timer shadow-md" data-tripped="false" data-energized="false">
-                        <div class="absolute top-2 left-2 text-[10px] font-bold text-slate-700">TIMER (On-Delay)</div>
+                    <div class="comp-timer" data-tripped="false" data-energized="false">
+                        <div class="absolute top-2 left-2 text-[10px] font-black text-slate-500 tracking-wider">TIMER</div>
                         <div class="absolute top-2 right-2 flex gap-2">
-                            <div class="flex flex-col items-center"><div class="timer-led led-pw"></div><span class="text-[8px] font-bold text-slate-500 mt-0.5">PW</span></div>
-                            <div class="flex flex-col items-center"><div class="timer-led led-up"></div><span class="text-[8px] font-bold text-slate-500 mt-0.5">UP</span></div>
+                            <div class="flex flex-col items-center"><div class="timer-led led-pw"></div><span class="text-[8px] font-bold text-slate-400 mt-0.5">PW</span></div>
+                            <div class="flex flex-col items-center"><div class="timer-led led-up"></div><span class="text-[8px] font-bold text-slate-400 mt-0.5">UP</span></div>
                         </div>
                         
                         <div class="timer-dial-bg" title="ตั้งเวลา (ปรับที่เมนูตั้งค่าด้านซ้าย)">
                             <div class="timer-dial-knob" style="transform: rotate(0deg);"></div>
                         </div>
-                        <div class="absolute top-[125px] w-full text-center text-[10px] font-bold text-slate-600 time-display">5 sec</div>
+                        <div class="absolute top-[125px] w-full text-center text-[11px] font-black text-slate-600 time-display">5 sec</div>
 
                         <!-- Terminals -->
                         <div class="terminal-plate" style="left: 15px; top: 25px;"></div>
@@ -1895,36 +1919,36 @@
                     </select>
                 `;
             } else if (type === 'breaker3p') {
-                html = `<div class="text-slate-500 bg-slate-100 p-2 rounded text-center border text-xs">
+                html = `<div class="text-slate-500 bg-slate-50 p-3 rounded-lg text-center border text-xs">
                     <strong class="text-slate-800 text-sm">เบรกเกอร์ 3 เฟส (MCCB)</strong><br>
                     <p class="mt-1">สวิตช์ตัดต่อวงจรหลัก 3 เฟส (L1, L2, L3)</p>
-                    <p class="text-red-500 font-bold mt-1 mb-2">คลิกที่สวิตช์เพื่อเปิด (ON) หรือปิด (OFF)</p>
+                    <p class="text-red-500 font-bold mt-2 mb-1">คลิกที่สวิตช์เพื่อเปิด (ON) หรือปิด (OFF)</p>
                 </div>`;
             } else if (type === 'overload') {
                 const limit = el.dataset.ampLimit || "9";
                 html = `
                     <label class="block font-semibold text-slate-700">พิกัดปรับตั้งกระแส (Amps):</label>
-                    <div class="flex gap-2 items-center my-1">
-                        <input type="range" id="prop-overload-amps" min="1" max="20" step="1" value="${limit}" class="w-full">
-                        <span id="prop-overload-val" class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-xs">${limit}A</span>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-overload-amps" min="1" max="20" step="1" value="${limit}" class="w-full accent-blue-600">
+                        <span id="prop-overload-val" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded border border-blue-200 text-sm shadow-sm">${limit}A</span>
                     </div>
-                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2">
-                        <strong>Overload Relay Contacts:</strong><br>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">Overload Relay Contacts:</strong><br>
                         - 95 & 96: หน้าสัมผัส NC (ปกติปิด) <br>
                         - 97 & 98: หน้าสัมผัส NO (ปกติเปิด) <br>
-                        <span class="text-red-500 font-semibold">เมื่อทริป: NC จะจาก (ตัดวงจรควบคุม) และ NO จะต่อ (แสดงไฟ Alarm)</span>
+                        <span class="text-red-500 font-semibold block mt-1">เมื่อทริป: NC จะจาก (ตัดวงจรควบคุม) และ NO จะต่อ (แสดงไฟ Alarm)</span>
                     </div>
                 `;
             } else if (type === 'motor') {
                 const load = el.dataset.load || "60";
                 html = `
                     <label class="block font-semibold text-slate-700">โหลดทางกลมอเตอร์ (Mechanical Load %):</label>
-                    <div class="flex gap-2 items-center my-1">
-                        <input type="range" id="prop-motor-load" min="0" max="150" step="5" value="${load}" class="w-full">
-                        <span id="prop-motor-load-val" class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">${load}%</span>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-motor-load" min="0" max="150" step="5" value="${load}" class="w-full accent-emerald-500">
+                        <span id="prop-motor-load-val" class="font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-200 text-sm shadow-sm">${load}%</span>
                     </div>
-                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2 leading-relaxed">
-                        <strong>พฤติกรรมกระแสโหลดจำลอง:</strong><br>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">พฤติกรรมกระแสโหลดจำลอง:</strong><br>
                         - โหลด &lt; 100%: มอเตอร์กินกระแสปกติ (ปลอดภัย)<br>
                         - โหลด &ge; 100% (Overload Zone): มอเตอร์กินกระแสเกินพิกัดปรับตั้งของโอเวอร์โหลด หากปล่อยให้ทำงานต่อเนื่อง โลหะไบเมทัลจะร้อนสะสมและสั่งทริปป้องกันมอเตอร์เสียหาย!
                     </div>
@@ -1933,12 +1957,12 @@
                 const delay = el.dataset.delay || "5";
                 html = `
                     <label class="block font-semibold text-slate-700">เวลาหน่วง (Delay Time):</label>
-                    <div class="flex gap-2 items-center my-1">
-                        <input type="range" id="prop-timer-delay" min="1" max="30" step="1" value="${delay}" class="w-full">
-                        <span id="prop-timer-val" class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-xs">${delay}s</span>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-timer-delay" min="1" max="30" step="1" value="${delay}" class="w-full accent-blue-600">
+                        <span id="prop-timer-val" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded border border-blue-200 text-sm shadow-sm">${delay}s</span>
                     </div>
-                    <div class="text-slate-500 text-xs bg-slate-50 p-2 border border-slate-200 rounded mt-2">
-                        <strong>การทำงาน (On-Delay):</strong><br>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">การทำงาน (On-Delay):</strong><br>
                         - เมื่อจ่ายไฟเข้า A1-A2 ตัวจับเวลาจะเริ่มนับ<br>
                         - เมื่อครบเวลา หน้าสัมผัส 15 จะเปลี่ยนจาก 16(NC) ไปต่อกับ 18(NO)<br>
                         - หากไฟเลี้ยงดับ จะรีเซ็ตกลับทันที
@@ -2712,18 +2736,18 @@
                     
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td class="p-3">
+                        <td class="p-4">
                             <div class="font-bold text-slate-800">${user.name || 'ไม่ระบุชื่อ'}</div>
-                            <div class="text-xs text-slate-500">${key.replace(/_/g, '.')}</div>
+                            <div class="text-xs text-slate-500 mt-1">${key.replace(/_/g, '.')}</div>
                         </td>
-                        <td class="p-3 text-center">
-                            <span class="px-2 py-1 rounded text-xs font-bold ${canSave ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
-                                ${canSave ? '<i class="fas fa-check-circle"></i> อนุญาต' : '<i class="fas fa-times-circle"></i> ล็อก'}
+                        <td class="p-4 text-center">
+                            <span class="px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm ${canSave ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}">
+                                ${canSave ? '<i class="fas fa-check-circle mr-1"></i> อนุญาต' : '<i class="fas fa-lock mr-1"></i> ระงับสิทธิ์'}
                             </span>
                         </td>
-                        <td class="p-3 text-center">
-                            <button onclick="toggleUserAccess('${key}', ${canSave})" class="px-3 py-1.5 rounded text-xs font-bold transition text-white ${canSave ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}">
-                                ${canSave ? 'ยกเลิกสิทธิ์' : 'อนุมัติสิทธิ์'}
+                        <td class="p-4 text-center">
+                            <button onclick="toggleUserAccess('${key}', ${canSave})" class="px-4 py-2 rounded-lg text-xs font-bold transition text-white shadow-sm transform active:scale-95 ${canSave ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700' : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'}">
+                                ${canSave ? '<i class="fas fa-ban mr-1"></i> ยกเลิกสิทธิ์' : '<i class="fas fa-unlock mr-1"></i> ปลดล็อค'}
                             </button>
                         </td>
                     `;
