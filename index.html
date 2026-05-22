@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Electrical Motor Control Simulator</title>
+    <title>Electrical Motor Control Simulator with Overload Relay & Adjustable Load</title>
     <!-- Use Tailwind CSS for rapid styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -330,8 +330,9 @@
             border-color: #ef4444;
             box-shadow: 0 0 30px rgba(239, 68, 68, 0.4), inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3);
         }
-        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 12px; animation: spin 0.2s linear infinite; filter: drop-shadow(0 0 6px #22c55e); }
-        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 12px; animation: spin-rev 0.2s linear infinite; filter: drop-shadow(0 0 6px #ef4444); }
+        /* Restore original spin animation */
+        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 12px; animation: spin 0.25s linear infinite; filter: drop-shadow(0 0 6px #22c55e); }
+        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 12px; animation: spin-rev 0.25s linear infinite; filter: drop-shadow(0 0 6px #ef4444); }
         
         .motor-load-gauge {
             width: 130px; background: rgba(2, 6, 23, 0.9); color: #4ade80;
@@ -408,6 +409,8 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin-rev { 100% { transform: rotate(-360deg); } }
     </style>
 </head>
 <body class="min-h-screen w-full flex flex-col h-screen">
@@ -448,8 +451,8 @@
         <div class="flex items-center gap-4">
             <div class="w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-300/50">M</div>
             <h1 class="text-lg font-bold tracking-wide hidden sm:flex flex-col leading-tight">
-                จำลองวงจรควบคุมมอเตอร์ไฟฟ้า 
-                <span class="text-[10px] font-medium text-blue-300 uppercase tracking-widest">Electrical Simulator Pro</span>
+                วงจรควบคุมมอเตอร์ไฟฟ้า แบบ PRO
+                <span class="text-[10px] font-medium text-blue-300 uppercase tracking-widest">Electrical Simulator Professional</span>
             </h1>
         </div>
         <div class="flex items-center gap-3 md:gap-4">
@@ -741,6 +744,22 @@
                 sysLog(this.isMuted ? "ปิดเสียง (Sound Muted)" : "เปิดเสียง (Sound Unmuted)");
                 // Try resume context on user action
                 this.init();
+            },
+            playClick: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(400, t + 0.05);
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.05);
             },
             playBreaker: function() {
                 if (this.isMuted) return;
@@ -1480,6 +1499,7 @@
                 const box = el.querySelector('.comp-mainbox');
                 sw.addEventListener('mousedown', (e) => {
                     e.stopPropagation(); // prevent drag
+                    SoundEngine.playClick();
                     const isOn = box.classList.contains('on');
                     if (isOn) {
                         box.classList.remove('on');
@@ -1500,6 +1520,7 @@
                 const box = el.querySelector('.comp-breaker3p');
                 handle.addEventListener('mousedown', (e) => {
                     e.stopPropagation(); // prevent drag
+                    SoundEngine.playClick();
                     const isOff = box.classList.contains('off');
                     if (isOff) {
                         box.classList.remove('off');
@@ -1524,6 +1545,7 @@
                 
                 tBtn.addEventListener('mousedown', (e) => {
                     e.stopPropagation();
+                    SoundEngine.playClick();
                     if (ov.dataset.tripped !== "true") {
                         ov.dataset.tripped = "true";
                         ov.classList.add('tripped');
@@ -1535,6 +1557,7 @@
 
                 rBtn.addEventListener('mousedown', (e) => {
                     e.stopPropagation();
+                    SoundEngine.playClick();
                     if (ov.dataset.tripped === "true") {
                         ov.dataset.tripped = "false";
                         ov.classList.remove('tripped');
@@ -1553,6 +1576,7 @@
                 
                 const pressBtn = (e) => {
                     if (e) e.stopPropagation();
+                    SoundEngine.playClick();
                     btnContainer.classList.add('pressed');
                     el.dataset.pressed = "true";
                     triggerEvaluation();
@@ -1891,6 +1915,7 @@
 
         document.getElementById('btn-top-delete').addEventListener('click', () => {
             if (!selectedElementId) return;
+            SoundEngine.playClick();
             if (selectedType === 'wire') { deleteWire(selectedElementId); }
             else {
                 saveState();
