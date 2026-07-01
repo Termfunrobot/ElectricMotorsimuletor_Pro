@@ -1,541 +1,2712 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMR Kid Learning - แหล่งเรียนรู้แสนสนุก</title>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts (Mitr & Itim for Playful Kid Style) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Itim&family=Mitr:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  
-  <style>
-    body {
-      font-family: 'Mitr', 'Itim', sans-serif;
-    }
-    .font-playful {
-      font-family: 'Itim', sans-serif;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electrical Motor Control Simulator with Overload Relay & Adjustable Load (Secured)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sarabun:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background-color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        
+        /* --- Workspace & Background --- */
+        .workspace-bg {
+            background-color: #f1f5f9;
+            background-image: 
+                linear-gradient(rgba(148, 163, 184, 0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        #canvas-layer {
+            position: absolute; width: 100%; height: 100%; transform-origin: 0 0;
+            pointer-events: none; 
+        }
+        #canvas-layer > * { pointer-events: auto; }
+        
+        /* --- Wiring Styles --- */
+        svg#wire-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            overflow: visible; pointer-events: none; z-index: 35;
+        }
+        .wire-path {
+            fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round;
+            pointer-events: auto; cursor: pointer; transition: stroke-width 0.15s ease, filter 0.15s ease;
+            filter: drop-shadow(1px 3px 2px rgba(0,0,0,0.35));
+        }
+        .wire-path:hover { stroke-width: 6.5; filter: drop-shadow(2px 5px 4px rgba(0,0,0,0.5)); }
+        
+        .wire-live { stroke-dasharray: 12, 8; animation: wire-flow 0.5s linear infinite; filter: drop-shadow(0 0 6px currentColor); }
+        @keyframes wire-flow { to { stroke-dashoffset: -20; } }
+
+        /* --- Terminals --- */
+        .terminal {
+            position: absolute; width: 14px; height: 14px; 
+            background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+            border: 1.5px solid #64748b; border-radius: 50%; cursor: crosshair; z-index: 40;
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.9), 0 2px 4px rgba(0,0,0,0.4);
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .terminal:hover, .terminal.snap-candidate { 
+            background: linear-gradient(135deg, #fef08a 0%, #f59e0b 100%); 
+            transform: scale(1.35); 
+            border-color: #b45309;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.8), inset 1px 1px 2px rgba(255,255,255,0.8);
+        }
+        
+        /* Inner screw detail */
+        .terminal::after {
+            content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 2px; background: #64748b; border-radius: 1px; pointer-events: none;
+            box-shadow: 0 1px 0 rgba(255,255,255,0.5);
+        }
+
+        .terminal-lg { width: 28px !important; height: 28px !important; }
+        .terminal-lg::after { width: 16px !important; height: 3px !important; }
+        .terminal-md { width: 20px !important; height: 20px !important; }
+        .terminal-md::after { width: 12px !important; height: 2px !important; }
+
+        .terminal-label {
+            position: absolute; font-size: 10px; font-weight: 800; color: #334155;
+            pointer-events: none; white-space: nowrap; text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
+        }
+
+        /* --- Component Shared Styles --- */
+        .draggable-item { 
+            position: absolute; cursor: grab; z-index: 10; 
+            transform-origin: center; filter: drop-shadow(4px 8px 12px rgba(0,0,0,0.25));
+            transition: filter 0.2s;
+        }
+        .draggable-item:active { cursor: grabbing; z-index: 50; filter: drop-shadow(8px 16px 20px rgba(0,0,0,0.35)) scale(1.01); }
+        
+        .selected-component {
+            outline: 3px dashed #0ea5e9 !important; outline-offset: 6px;
+            filter: drop-shadow(0 0 15px rgba(14, 165, 233, 0.6)) !important; z-index: 15 !important;
+            border-radius: 8px;
+        }
+        .selected-wire { stroke-dasharray: 8, 8; animation: dash 0.5s linear infinite; filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.9)); }
+
+        /* --- Specific Electrical Components --- */
+
+        /* 1. Main Breaker Box (MDB) */
+        .comp-mainbox {
+            width: 440px; height: 380px; 
+            background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%); 
+            border: 2px solid #cbd5e1;
+            border-radius: 16px; position: relative; 
+            box-shadow: inset 2px 2px 5px rgba(255,255,255,1), inset -3px -3px 10px rgba(0,0,0,0.05);
+        }
+        .breaker-switch {
+            width: 120px; height: 100px; 
+            background: linear-gradient(to bottom, #1e293b, #0f172a); 
+            border-radius: 10px;
+            position: absolute; top: 60px; left: 40px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            border: 2px solid #334155; transition: all 0.2s; 
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.8), 0 2px 5px rgba(255,255,255,0.5);
+        }
+        .breaker-handle {
+            width: 80px; height: 40px; 
+            background: linear-gradient(to bottom, #ef4444, #dc2626); 
+            border-radius: 6px;
+            border-top: 1px solid #fca5a5;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.4);
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s; 
+            transform: translateY(24px);
+        }
+        .comp-mainbox.on .breaker-handle {
+            transform: translateY(-24px); 
+            background: linear-gradient(to bottom, #22c55e, #16a34a);
+            border-top: 1px solid #86efac;
+            box-shadow: 0 6px 15px rgba(34, 197, 94, 0.4), inset 0 2px 4px rgba(255,255,255,0.4);
+        }
+        .busbar {
+            position: absolute; width: 340px; height: 28px; border-radius: 6px;
+            border: 1px solid #94a3b8; box-shadow: inset 0 2px 4px rgba(255,255,255,0.8), 2px 4px 8px rgba(0,0,0,0.2);
+        }
+        .busbar.neutral { background: linear-gradient(to bottom, #f1f5f9, #94a3b8); bottom: 100px; left: 50px; }
+        .busbar.ground { background: repeating-linear-gradient(45deg, #22c55e, #22c55e 16px, #eab308 16px, #eab308 32px); bottom: 40px; left: 50px; border-color: #15803d; }
+        
+        .box-warning {
+            position: absolute; top: 20px; right: 20px; width: 60px; height: 60px;
+            background: linear-gradient(135deg, #fde047, #eab308); 
+            border-radius: 8px; border: 3px solid #1e293b;
+            display: flex; justify-content: center; align-items: center; font-weight: 900; font-size: 36px; color: #1e293b;
+            box-shadow: inset 2px 2px 4px rgba(255,255,255,0.5), 2px 4px 6px rgba(0,0,0,0.2);
+        }
+
+        /* 2. Magnetic Contactor */
+        .comp-contactor {
+            width: 158px; height: 230px; 
+            background: linear-gradient(180deg, #f8fafc, #e2e8f0); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #f1f5f9;
+            border-radius: 6px; position: relative;
+            box-shadow: inset 1px 1px 3px rgba(255,255,255,1), 2px 4px 10px rgba(0,0,0,0.15);
+        }
+        .comp-contactor::before {
+            content: ''; position: absolute; left: 10px; right: 10px; top: 48px; bottom: 48px;
+            background: linear-gradient(to bottom, #f1f5f9, #e2e8f0); border-radius: 4px; border: 1px solid #cbd5e1;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .sn10-core-bg {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 50px; height: 50px; background: #1e293b; border-radius: 4px;
+            border: 2px solid #0f172a; z-index: 1; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+        .contactor-core {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 36px; height: 36px; background: linear-gradient(145deg, #334155, #0f172a); 
+            border: 1px solid #475569; border-radius: 2px;
+            display: flex; justify-content: space-evenly; align-items: center;
+            transition: transform 0.1s, box-shadow 0.1s; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 2;
+        }
+        .comp-contactor.active {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3), inset 1px 1px 3px rgba(255,255,255,1);
+            border-color: #38bdf8;
+        }
+        .comp-contactor.active .contactor-core {
+            transform: translate(-50%, -50%) scale(0.95) translateY(4px); 
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.9), 0 0 15px rgba(14, 165, 233, 0.6);
+            background: #020617; border-color: #1e293b;
+        }
+        .core-hole { width: 10px; height: 16px; background: #000; border-radius: 2px; box-shadow: inset 1px 1px 2px rgba(255,255,255,0.1); }
+        .sn10-label {
+            position: absolute; left: 14px; top: 105px; 
+            background: linear-gradient(to right, #0284c7, #0369a1); color: white;
+            font-weight: 800; font-family: 'Inter', sans-serif; font-size: 13px; padding: 2px 8px;
+            border-radius: 3px; box-shadow: 1px 2px 4px rgba(0,0,0,0.3); z-index: 3; letter-spacing: 0.5px;
+            border: 1px solid #0c4a6e;
+        }
+        .sn10-text { position: absolute; font-size: 9px; font-weight: 800; color: #0284c7; pointer-events: none; text-align: center; width: 30px; z-index: 3; }
+        .sn10-text.black { color: #475569; }
+        .terminal-plate {
+            position: absolute; width: 22px; height: 22px; 
+            background: linear-gradient(to bottom, #f8fafc, #cbd5e1);
+            border: 1px solid #94a3b8; border-radius: 4px; 
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.1); z-index: 2;
+        }
+
+        /* 3. Thermal Overload Relay */
+        .comp-overload {
+            width: 158px; height: 195px; 
+            background: linear-gradient(145deg, #1e293b, #0f172a); 
+            border: 1px solid #020617; border-top: 1px solid #334155;
+            border-radius: 6px; position: relative;
+            box-shadow: inset 1px 1px 3px rgba(255,255,255,0.1), 2px 4px 12px rgba(0,0,0,0.4);
+        }
+        .overload-dial {
+            position: absolute; top: 48px; left: 15px; width: 32px; height: 32px;
+            border-radius: 50%; background: #f8fafc; border: 2px dashed #94a3b8;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .overload-dial::after {
+            content: ''; position: absolute; width: 14px; height: 3px; background: #ef4444;
+            transform: rotate(45deg); border-radius: 1px; box-shadow: 0 1px 1px rgba(0,0,0,0.2);
+        }
+        .overload-trip-btn {
+            position: absolute; top: 48px; left: 58px; width: 22px; height: 22px;
+            background: linear-gradient(to bottom, #ef4444, #dc2626); 
+            border: 1px solid #991b1b; border-radius: 4px;
+            cursor: pointer; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: 800;
+            transition: all 0.1s;
+        }
+        .overload-trip-btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+        .overload-reset-btn {
+            position: absolute; top: 48px; left: 88px; width: 22px; height: 22px;
+            background: linear-gradient(to bottom, #3b82f6, #2563eb); 
+            border: 1px solid #1e40af; border-radius: 50%;
+            cursor: pointer; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: 800;
+            transition: all 0.1s;
+        }
+        .overload-reset-btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+        .overload-label {
+            position: absolute; left: 14px; top: 12px; background: #e2e8f0; color: #0f172a;
+            font-weight: 900; font-family: 'Inter', sans-serif; font-size: 11px; padding: 2px 6px;
+            border-radius: 3px; border: 1px solid #94a3b8; box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .comp-overload.tripped::after {
+            content: 'TRIPPED'; position: absolute; right: 8px; top: 15px; 
+            background: linear-gradient(to right, #ef4444, #dc2626);
+            color: white; font-size: 9px; font-weight: 900; padding: 2px 5px; border-radius: 3px;
+            animation: pulse 0.6s infinite alternate;
+            box-shadow: 0 0 10px #ef4444, inset 0 1px 1px rgba(255,255,255,0.4);
+            border: 1px solid #991b1b;
+        }
+        .comp-overload.tripped {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4), inset 1px 1px 3px rgba(255,255,255,0.1);
+            border-color: #ef4444;
+        }
+
+        .thermal-bar-container {
+            position: absolute; left: 15px; top: 42px; width: 95px; height: 5px;
+            background: #020617; border-radius: 2px; overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.8); border: 1px solid #334155;
+        }
+        .thermal-bar {
+            width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #f59e0b, #ef4444);
+            transition: width 0.3s; box-shadow: 0 0 5px currentColor;
+        }
+
+        /* 4. Push Buttons */
+        .comp-button {
+            width: 80px; height: 110px; 
+            background: linear-gradient(to bottom, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05), inset 0 2px 4px rgba(255,255,255,1);
+        }
+        .btn-head {
+            width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+            box-shadow: 0 6px 0 #94a3b8, 0 10px 15px rgba(0,0,0,0.3); transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); 
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        .btn-head:active, .comp-button.pressed .btn-head {
+            transform: translateY(6px); box-shadow: 0 0 0 #94a3b8, 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .btn-green { background: radial-gradient(circle at 35% 35%, #86efac, #22c55e, #16a34a); }
+        .btn-red { background: radial-gradient(circle at 35% 35%, #fca5a5, #ef4444, #dc2626); }
+
+        /* 5. Pilot Lamp */
+        .comp-lamp {
+            width: 60px; height: 80px; 
+            background: linear-gradient(to bottom, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; display: flex; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .lamp-bulb {
+            width: 46px; height: 46px; border-radius: 50%; margin-top: 8px;
+            background: radial-gradient(circle at 35% 35%, #f8fafc, #94a3b8); border: 2px solid #64748b;
+            box-shadow: inset 2px 2px 6px rgba(255,255,255,0.8), 0 4px 8px rgba(0,0,0,0.2); transition: all 0.2s;
+        }
+        .comp-lamp.active .lamp-bulb.color-green { background: radial-gradient(circle at 40% 40%, #bbf7d0, #22c55e, #15803d); box-shadow: 0 0 30px 8px rgba(34, 197, 94, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #16a34a; }
+        .comp-lamp.active .lamp-bulb.color-red { background: radial-gradient(circle at 40% 40%, #fecaca, #ef4444, #b91c1c); box-shadow: 0 0 30px 8px rgba(239, 68, 68, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #dc2626; }
+        .comp-lamp.active .lamp-bulb.color-yellow { background: radial-gradient(circle at 40% 40%, #fef08a, #eab308, #a16207); box-shadow: 0 0 30px 8px rgba(234, 179, 8, 0.6), inset 2px 2px 8px rgba(255,255,255,0.9); border-color: #d97706; }
+
+        /* 6. 3-Phase Motor */
+        .comp-motor {
+            width: 150px; height: 185px; position: relative; display: flex; flex-direction: column; align-items: center;
+        }
+        .motor-body {
+            width: 124px; height: 124px; border-radius: 50%; 
+            background: radial-gradient(circle at 30% 30%, #94a3b8, #475569);
+            border: 4px solid #1e293b; position: relative; display: flex; justify-content: center; align-items: center;
+            box-shadow: inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3), 0 12px 20px rgba(0,0,0,0.4);
+            overflow: hidden;
+            transition: box-shadow 0.3s, border-color 0.3s;
+        }
+        .motor-label { font-size: 34px; font-weight: 900; font-family:'Inter', sans-serif; color: #0f172a; text-shadow: 1px 1px 2px rgba(255,255,255,0.4); z-index: 3; }
+        .motor-rotor {
+            position: absolute; width: 82%; height: 82%; border-radius: 50%;
+            border: 10px dashed rgba(15,23,42,0.15); transition: transform 0.2s;
+            z-index: 2;
+        }
+        .motor-terminal-box {
+            width: 110px; height: 60px; 
+            background: linear-gradient(180deg, #475569, #334155); 
+            border: 2px solid #0f172a; border-bottom: none;
+            border-radius: 6px 6px 0 0; position: relative; margin-bottom: -8px; z-index: 4;
+            display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; gap: 6px;
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.2);
+        }
+        
+        /* Active Motor States */
+        .comp-motor.spin-fwd .motor-body {
+            border-color: #22c55e;
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3);
+        }
+        .comp-motor.spin-rev .motor-body {
+            border-color: #ef4444;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4), inset -6px -6px 15px rgba(0,0,0,0.6), inset 6px 6px 15px rgba(255,255,255,0.3);
+        }
+        .comp-motor.spin-fwd .motor-rotor { border-color: #22c55e; border-width: 12px; animation: spin 0.25s linear infinite; filter: drop-shadow(0 0 6px #22c55e); }
+        .comp-motor.spin-rev .motor-rotor { border-color: #ef4444; border-width: 12px; animation: spin-rev 0.25s linear infinite; filter: drop-shadow(0 0 6px #ef4444); }
+        
+        .motor-load-gauge {
+            width: 140px; background: rgba(2, 6, 23, 0.9); color: #4ade80;
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 3px 4px;
+            text-align: center; margin-top: 6px; border: 1px solid #334155; z-index: 10;
+            box-shadow: inset 0 0 8px rgba(0,0,0,1), 0 2px 4px rgba(0,0,0,0.3);
+            letter-spacing: 0px;
+        }
+        .motor-load-gauge.overloaded { color: #f87171; border-color: #ef4444; text-shadow: 0 0 5px #ef4444; animation: flash-gauge 0.4s infinite alternate; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), inset 0 0 8px rgba(0,0,0,1); }
+
+        .speed-indicator { box-shadow: 0 0 12px rgba(34, 197, 94, 0.8); }
+        .speed-indicator.bg-red-600 { box-shadow: 0 0 12px rgba(239, 68, 68, 0.8); }
+
+        /* 7. 3-Phase Breaker (MCCB) */
+        .comp-breaker3p {
+            width: 130px; height: 190px; 
+            background: linear-gradient(180deg, #ffffff, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
+        }
+        .breaker3p-switch-container {
+            width: 46px; height: 64px; background: #1e293b; border: 2px solid #0f172a;
+            border-radius: 4px; position: absolute; top: 63px; left: 40px;
+            display: flex; justify-content: center; align-items: center; overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.8);
+        }
+        .breaker3p-handle {
+            width: 32px; height: 32px; 
+            background: linear-gradient(to bottom, #475569, #1e293b); 
+            border-radius: 3px; cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.6);
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s; position: relative; z-index: 2;
+        }
+        .breaker3p-bg-on { position: absolute; top: 5px; color: #ef4444; font-size: 11px; font-weight: 900; }
+        .breaker3p-bg-off { position: absolute; bottom: 5px; color: #22c55e; font-size: 11px; font-weight: 900; }
+        .comp-breaker3p.on .breaker3p-handle { 
+            transform: translateY(-14px); 
+            background: linear-gradient(to bottom, #22c55e, #16a34a);
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), 0 4px 12px rgba(34, 197, 94, 0.6);
+            border-top: 1px solid #86efac;
+        }
+        .comp-breaker3p.off .breaker3p-handle { transform: translateY(14px); border-bottom: 1px solid #0f172a; }
+
+        /* 8. Timer Relay */
+        .comp-timer {
+            width: 140px; height: 180px; 
+            background: linear-gradient(180deg, #f8fafc, #f1f5f9); 
+            border: 1px solid #cbd5e1; border-top: 2px solid #e2e8f0;
+            border-radius: 8px; position: relative; box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
+        }
+        .timer-dial-bg {
+            position: absolute; top: 40px; left: 28px; width: 80px; height: 80px;
+            border-radius: 50%; background: #f1f5f9; border: 2px solid #94a3b8;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1), 0 2px 4px rgba(255,255,255,1);
+        }
+        .timer-dial-knob {
+            width: 58px; height: 58px; border-radius: 50%; 
+            background: linear-gradient(135deg, #475569, #1e293b);
+            position: relative; transition: transform 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4), inset 1px 1px 2px rgba(255,255,255,0.2);
+            border: 1px solid #0f172a;
+        }
+        .timer-dial-knob::after {
+            content: ''; position: absolute; top: 4px; left: 27px; width: 4px; height: 18px;
+            background: #f8fafc; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        
+        /* Modern Utilities */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin-rev { 100% { transform: rotate(-360deg); } }
+    </style>
 </head>
-<body class="bg-gradient-to-b from-amber-50 via-teal-50 to-indigo-50 min-h-screen flex flex-col justify-between text-slate-800">
+<body class="min-h-screen w-full flex flex-col h-screen">
 
-  <!-- Header / Navigation -->
-  <header class="w-full py-4 px-6 md:px-12 flex justify-between items-center bg-white/70 backdrop-blur-md border-b border-amber-100 sticky top-0 z-40">
-    <div class="flex items-center gap-3">
-      <div class="bg-gradient-to-tr from-amber-400 to-pink-500 p-2.5 rounded-2xl shadow-lg shadow-amber-200">
-        <i data-lucide="graduation-cap" class="w-8 h-8 text-white"></i>
-      </div>
-      <div>
-        <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-indigo-600 via-pink-500 to-amber-500 bg-clip-text text-transparent font-playful tracking-wide">
-          SMR KID LEARNING
-        </h1>
-        <p class="text-xs text-slate-500 font-medium hidden sm:block">โลกแห่งการเรียนรู้ของหนูน้อย</p>
-      </div>
-    </div>
-    
-    <div class="flex items-center gap-4">
-      <a href="https://smr-kidlearning.netlify.app/" target="_blank" class="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-all duration-300">
-        <span>เข้าสู่บทเรียน</span>
-        <i data-lucide="external-link" class="w-4 h-4"></i>
-      </a>
-      <button onclick="openAdminModal()" class="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-sm font-medium transition-all">
-        <i data-lucide="settings" class="w-4 h-4"></i>
-        <span>จัดการเว็บบอร์ด</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="flex-grow container mx-auto px-4 md:px-8 py-8 md:py-16">
-    <!-- Hero Banner Section -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-16">
-      <div class="lg:col-span-7 space-y-6 text-center lg:text-left">
-        <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold uppercase tracking-wider">
-          <i data-lucide="sparkles" class="w-4 h-4 text-amber-500 animate-pulse"></i>
-          <span>แหล่งความรู้และความสนุกครบวงจร</span>
+    <div id="authOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white/95 backdrop-blur-xl rounded-[24px] p-8 max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/40">
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-[0_10px_20px_rgba(59,130,246,0.3)] border-4 border-white">
+                    <i class="fas fa-plug"></i>
+                </div>
+                <h2 class="text-2xl font-black text-slate-800 tracking-tight">วงจรควบคุมมอเตอร์</h2>
+                <p class="text-sm text-slate-500 mt-1 font-medium">กรุณาล็อกอินด้วยบัญชี Google</p>
+            </div>
+            
+            <div id="loginFormSim" class="space-y-4">
+                <button id="btn-google-login" type="button" class="w-full bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 font-bold py-4 rounded-xl transition shadow-[0_8px_15px_rgba(0,0,0,0.05)] flex justify-center items-center gap-3 transform active:scale-[0.98]">
+                    <svg class="w-6 h-6" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                    </svg>
+                    เข้าสู่ระบบด้วย Google
+                </button>
+            </div>
+            
+            <div id="loginMsg" class="mt-4 text-center text-sm font-bold text-red-500 hidden bg-red-50 py-3 rounded-xl border border-red-100"></div>
         </div>
+    </div>
+
+    <header class="h-16 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/50 flex items-center justify-between px-6 shadow-lg z-[60] shrink-0 w-full text-white">
+        <div class="flex items-center gap-4">
+            <div class="w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-300/50">M</div>
+            <h1 class="text-lg font-bold tracking-wide hidden sm:flex flex-col leading-tight">
+                วงจรควบคุมมอเตอร์ไฟฟ้า แบบ PRO
+                <span class="text-[10px] font-medium text-blue-300 uppercase tracking-widest">Electrical Simulator Professional</span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-3 md:gap-4">
+            
+            <div id="creditBadge" class="hidden items-center gap-2 bg-yellow-500/10 px-3 py-1.5 rounded-lg border border-yellow-500/30 backdrop-blur-sm mr-1 text-sm font-bold text-yellow-400 shadow-inner">
+                <span id="userCredits"><i class="fas fa-coins text-yellow-400"></i> ...</span>
+            </div>
+
+            <div id="userProfileBadge" class="hidden items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-600/50 backdrop-blur-sm">
+                <div class="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-xs shadow-inner"><i class="fas fa-user text-white"></i></div>
+                <span id="userNameDisplay" class="text-xs font-semibold text-slate-200 truncate max-w-[100px] md:max-w-[150px]">ผู้ใช้</span>
+                <div class="h-4 w-px bg-slate-600 mx-1"></div>
+                <button id="btn-logout" class="text-xs text-red-400 hover:text-red-300 transition font-bold" title="ออกจากระบบ">ออก</button>
+            </div>
+            
+            <div class="h-6 w-px bg-slate-700 mx-1 hidden md:block"></div>
+
+            <div class="hidden lg:flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-600/50 backdrop-blur-sm">
+                <span class="text-xs font-semibold text-slate-400">สีสาย:</span>
+                <select id="wire-color-select" class="text-sm bg-transparent text-white border-none outline-none cursor-pointer font-medium">
+                    <option value="#ef4444" class="bg-slate-800">🔴 แดง (L)</option>
+                    <option value="#3b82f6" class="bg-slate-800">🔵 น้ำเงิน (N)</option>
+                    <option value="#8b5cf6" class="bg-slate-800">🟣 ม่วง (L1)</option>
+                    <option value="#10b981" class="bg-slate-800">🟢 เขียว (L2)</option>
+                    <option value="#f59e0b" class="bg-slate-800">🟡 เหลือง (L3)</option>
+                    <option value="#1e293b" class="bg-slate-800">⚫ ดำ (ทั่วไป)</option>
+                </select>
+            </div>
+            
+            <div class="text-[10px] text-blue-200 bg-blue-900/30 px-3 py-1.5 rounded-lg hidden xl:block border border-blue-500/20 font-medium">
+                <i class="fas fa-info-circle mr-1"></i> ระบบลากสาย Snap: คลิกขั้วเริ่ม → คลิกหักมุมอิสระ → คลิกขั้วปลาย (ESC เพื่อยกเลิก)
+            </div>
+
+            <div id="top-actions" class="flex items-center gap-2 hidden">
+                <button id="btn-top-delete" class="px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500 hover:text-white transition text-sm flex items-center gap-2 font-medium">
+                    <i class="fas fa-trash-alt"></i> ลบ
+                </button>
+            </div>
+
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
+
+            <button id="btn-sound-toggle" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="เปิด/ปิดเสียง (Sound)">
+                <i class="fas fa-volume-up" id="icon-sound"></i>
+            </button>
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
+            <button id="btn-save" class="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/30 rounded-lg transition text-sm flex items-center gap-2 font-medium" title="บันทึกวงจรลงไฟล์ .txt"><i class="fas fa-save"></i><span class="hidden md:inline"> Save</span></button>
+            <button id="btn-load-trigger" class="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border border-blue-500/30 rounded-lg transition text-sm flex items-center gap-2 font-medium" title="เปิดไฟล์วงจร"><i class="fas fa-folder-open"></i><span class="hidden md:inline"> Load</span></button>
+            <input type="file" id="file-input" class="hidden" accept=".txt,.json">
+            
+            <div class="h-6 w-px bg-slate-700 mx-1"></div>
+            
+            <button id="btn-undo" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="ย้อนกลับ (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+            <button id="btn-reset" class="w-9 h-9 bg-slate-800/80 text-slate-300 border border-slate-600/50 rounded-lg hover:bg-slate-700 hover:text-white transition flex items-center justify-center shadow-sm" title="เริ่มใหม่"><i class="fas fa-redo"></i></button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-row overflow-hidden relative">
         
-        <h2 id="display-welcome-title" class="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-tight">
-          ยินดีต้อนรับสู่ แหล่งเรียนรู้แสนสนุก!
-        </h2>
+        <div id="explosion-overlay" class="absolute inset-0 z-[100] hidden flex-col items-center justify-center pointer-events-none">
+            <div class="text-[150px] mb-2 leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.9)]">💥</div>
+            <h1 class="text-7xl font-black text-white drop-shadow-[0_5px_15px_rgba(220,38,38,1)] uppercase tracking-wider text-center">Short Circuit!</h1>
+            <h2 id="explosion-reason" class="text-2xl font-bold text-yellow-300 drop-shadow-[0_2px_5px_rgba(0,0,0,1)] mt-6 bg-black/80 backdrop-blur border border-red-500/50 px-8 py-4 rounded-2xl shadow-2xl"></h2>
+            <p class="text-white mt-4 font-bold bg-gradient-to-r from-red-600 to-red-700 px-5 py-2 rounded-lg shadow-lg border border-red-400">เบรกเกอร์ทริปอัตโนมัติ (Breaker Tripped)</p>
+        </div>
+
+        <aside class="w-64 bg-slate-50 border-r border-slate-200/80 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20 flex flex-col shrink-0 relative">
+            <div class="p-4 bg-white border-b border-slate-200/80 font-bold text-slate-800 text-sm flex justify-between items-center shadow-sm">
+                <span><i class="fas fa-toolbox text-blue-500 mr-2"></i> คลังอุปกรณ์</span>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="mainbox">
+                    <div class="w-9 h-9 bg-gradient-to-br from-slate-200 to-slate-300 border border-slate-400 rounded flex items-center justify-center relative shadow-inner">
+                        <div class="w-3 h-4 bg-slate-700 rounded-sm"></div>
+                        <div class="absolute bottom-1 w-6 h-1 bg-green-500 rounded-full"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight flex-1">ตู้เมน (MDB)<br><span class="text-[10px] text-slate-400 font-medium">3P + N + PE</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="breaker3p">
+                    <div class="w-7 h-9 bg-gradient-to-b from-white to-slate-100 border border-slate-300 rounded flex flex-col justify-center items-center relative shadow-sm">
+                        <div class="w-3 h-4 bg-slate-800 rounded-sm"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight flex-1">เบรกเกอร์ 3 เฟส<br><span class="text-[10px] text-slate-400 font-medium">MCCB 100A</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="contactor">
+                    <div class="w-7 h-9 bg-gradient-to-b from-slate-50 to-slate-200 border border-slate-300 rounded flex flex-col justify-between items-center py-1 relative shadow-sm">
+                        <div class="w-4 h-1 bg-slate-400 rounded-full"></div>
+                        <div class="w-3 h-3 bg-slate-800 rounded-sm shadow-inner"></div>
+                        <div class="w-4 h-1 bg-slate-400 rounded-full"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight flex-1">แมกเนติก<br><span class="text-[10px] text-slate-400 font-medium">Contactor S-N10</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="overload">
+                    <div class="w-7 h-9 bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-600 rounded flex flex-col justify-between items-center py-1.5 relative shadow-sm">
+                        <div class="w-3 h-3 bg-red-500 rounded-full shadow-inner"></div>
+                        <div class="w-3 h-3 bg-blue-500 rounded-sm shadow-inner"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight flex-1">โอเวอร์โหลด<br><span class="text-[10px] text-slate-400 font-medium">TH-N12 Relay</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="button_no">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-4 h-4 bg-gradient-to-br from-green-400 to-green-600 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.2),0_2px_4px_rgba(0,0,0,0.1)]"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 flex-1">สวิตช์ Start <span class="text-[10px] text-green-500">(NO)</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="button_nc">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-4 h-4 bg-gradient-to-br from-red-400 to-red-600 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.2),0_2px_4px_rgba(0,0,0,0.1)]"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 flex-1">สวิตช์ Stop <span class="text-[10px] text-red-500">(NC)</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="motor">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center text-white font-black text-sm shadow-sm">M</div>
+                    <div class="text-sm font-semibold text-slate-700 flex-1">มอเตอร์ 3 เฟส</div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="lamp">
+                    <div class="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-sm">
+                        <div class="w-5 h-5 bg-gradient-to-br from-yellow-200 to-yellow-400 rounded-full shadow-[inset_0_-1px_2px_rgba(0,0,0,0.1),0_2px_6px_rgba(234,179,8,0.4)] border border-yellow-500"></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 flex-1">ไฟสัญญาณ (Lamp)</div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="library-item p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:shadow-[0_4px_12px_rgba(59,130,246,0.1)] transition-all flex items-center gap-3 transform hover:-translate-y-0.5" data-comp-type="timer">
+                    <div class="w-7 h-9 bg-gradient-to-b from-slate-50 to-slate-100 border border-slate-300 rounded flex flex-col items-center py-1.5 gap-1 shadow-sm">
+                        <div class="w-4 h-4 rounded-full border border-slate-400 bg-white flex items-center justify-center shadow-inner"><div class="w-0.5 h-1.5 bg-slate-600 rounded-sm"></div></div>
+                    </div>
+                    <div class="text-sm font-semibold text-slate-700 leading-tight flex-1">ทามเมอร์ (Timer)<br><span class="text-[10px] text-slate-400 font-medium">On-Delay</span></div>
+                    <div class="text-[10px] font-bold text-yellow-500 shrink-0 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">-2 🪙</div>
+                </div>
+
+                <div class="mt-2 p-3 bg-red-50/80 rounded-xl border border-red-200/60 text-[10px] text-red-700 leading-relaxed font-medium">
+                    <strong class="text-red-600 block mb-1"><i class="fas fa-exclamation-triangle"></i> คำเตือนความปลอดภัย</strong>
+                    ระวังการต่อสายไฟลัดวงจร (Short Circuit) โดยไม่ผ่านโหลด เบรกเกอร์จะทริปและเกิดระเบิดจำลองทันที! (จะถูกหัก 5 🪙)
+                </div>
+            </div>
+
+            <div id="properties-panel" class="hidden flex-col border-t border-slate-200 bg-white/95 backdrop-blur shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] rounded-t-2xl z-30 transition-all">
+                <div class="p-3 border-b border-slate-100 font-bold text-slate-800 flex justify-between items-center text-sm">
+                    <span class="flex items-center gap-2"><i class="fas fa-sliders-h text-blue-500"></i> ตั้งค่าอุปกรณ์</span>
+                    <button id="btn-prop-close" class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-4 flex flex-col gap-3 text-sm" id="properties-content">
+                    </div>
+            </div>
+        </aside>
+
+        <section id="workspace" class="flex-1 relative workspace-bg overflow-hidden cursor-grab active:cursor-grabbing">
+            <div id="canvas-layer" style="transform-origin: 0 0;">
+                <svg id="wire-layer"></svg>
+            </div>
+        </section>
         
-        <p id="display-welcome-subtitle" class="text-base md:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-          พัฒนาทักษะและสมอง เสริมสร้างปัญญา ผ่านบทเรียนและเกมสร้างสรรค์สำหรับเด็กยุคใหม่ พัฒนาการดีขึ้นอย่างเห็นได้ชัด
-        </p>
+        <div class="absolute bottom-6 right-6 w-80 glass-panel rounded-xl shadow-2xl z-50 flex flex-col max-h-[250px] overflow-hidden">
+            <div class="px-4 py-2.5 bg-white/10 text-white text-xs font-bold border-b border-white/10 flex justify-between items-center">
+                <span class="flex items-center gap-2"><i class="fas fa-terminal text-blue-400"></i> System Log</span>
+                <button id="btn-clear-log" class="text-slate-400 hover:text-white transition">Clear</button>
+            </div>
+            <div id="sys-log" class="p-3 overflow-y-auto text-[11px] font-mono text-slate-300 flex-1 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-600">
+                </div>
+        </div>
+    </main>
 
-        <div class="pt-4 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-          <a href="https://smr-kidlearning.netlify.app/" target="_blank" class="group flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-semibold text-lg rounded-2xl shadow-xl shadow-orange-200 hover:shadow-orange-300 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300">
-            <span>เข้าสู่เว็บไซต์หลักได้ที่นี่</span>
-            <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
-          </a>
-        </div>
-        
-        <div class="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200/60 max-w-md mx-auto lg:mx-0">
-          <div class="text-center lg:text-left">
-            <span class="block text-2xl font-bold text-indigo-600 font-playful">100+</span>
-            <span class="text-xs text-slate-500">บทเรียนแสนสนุก</span>
-          </div>
-          <div class="text-center lg:text-left">
-            <span class="block text-2xl font-bold text-pink-500 font-playful">ใช้งานง่าย</span>
-            <span class="text-xs text-slate-500">เหมาะกับทุกวัย</span>
-          </div>
-          <div class="text-center lg:text-left">
-            <span class="block text-2xl font-bold text-emerald-500 font-playful">ปลอดภัย</span>
-            <span class="text-xs text-slate-500">ไม่มีโฆษณาคั่น</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Hero Image Area -->
-      <div class="lg:col-span-5 flex justify-center">
-        <div class="relative w-full max-w-md aspect-square bg-white p-4 rounded-[2.5rem] shadow-2xl rotate-2 hover:rotate-0 transition-transform duration-500">
-          <div class="absolute -top-4 -left-4 bg-pink-400 text-white p-3 rounded-2xl -rotate-12 shadow-lg">
-            <i data-lucide="heart" class="w-6 h-6 fill-white"></i>
-          </div>
-          <div class="absolute -bottom-4 -right-4 bg-amber-400 text-white p-3 rounded-2xl rotate-12 shadow-lg">
-            <i data-lucide="star" class="w-6 h-6 fill-white"></i>
-          </div>
-          <img id="display-hero-image" src="https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80" alt="Kid Learning" class="w-full h-full object-cover rounded-[2rem] bg-amber-100" onerror="this.src='https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80'">
-        </div>
-      </div>
-    </div>
-
-    <!-- Media Showcase Section (Image + YouTube Video) -->
-    <div class="mt-16 bg-white/80 backdrop-blur-md p-6 md:p-10 rounded-[3rem] shadow-xl border border-white">
-      <div class="text-center max-w-xl mx-auto mb-10">
-        <h3 class="text-2xl md:text-3xl font-bold text-slate-900 mb-2">สื่อแนะนำประจำวัน</h3>
-        <p class="text-sm text-slate-500">รูปภาพและวิดีโอแนะนำเพื่อเสริมสร้างจินตนาการและการเรียนรู้</p>
-      </div>
-      
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Showcase Image -->
-        <div class="flex flex-col gap-3">
-          <h4 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <i data-lucide="image" class="w-5 h-5 text-indigo-500"></i>
-            <span>ภาพกิจกรรม</span>
-          </h4>
-          <div class="bg-slate-100 rounded-3xl overflow-hidden aspect-video shadow-inner relative group border border-slate-200">
-            <img id="display-showcase-image" src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=800&q=80" alt="Activity" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" onerror="this.src='https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=800&q=80'">
-          </div>
-        </div>
-
-        <!-- YouTube Video -->
-        <div class="flex flex-col gap-3">
-          <h4 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <i data-lucide="video" class="w-5 h-5 text-red-500"></i>
-            <span>วิดีโอเพื่อการเรียนรู้</span>
-          </h4>
-          <div class="bg-slate-100 rounded-3xl overflow-hidden aspect-video shadow-inner border border-slate-200">
-            <iframe id="display-youtube-iframe" class="w-full h-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
-
-  <!-- Footer -->
-  <footer class="w-full py-8 px-6 bg-slate-900 text-slate-400 text-center border-t border-slate-800 mt-16">
-    <div class="container mx-auto space-y-4">
-      <div class="flex justify-center items-center gap-2">
-        <div class="bg-amber-400 p-1 rounded-lg">
-          <i data-lucide="graduation-cap" class="w-5 h-5 text-slate-900"></i>
-        </div>
-        <span class="text-white font-bold font-playful text-lg">SMR KID LEARNING</span>
-      </div>
-      <p class="text-xs text-slate-500 max-w-md mx-auto">
-        ยินดีต้อนรับสู่หน้าระบบกลางสำหรับเข้าสู่บทเรียน หากต้องการแก้ไขเนื้อหาด้านบน สามารถใช้รหัสผ่านแอดมินเพื่อตั้งค่าระบบได้ทันที
-      </p>
-      <div class="text-xs text-slate-600 pt-4 border-t border-slate-800">
-        &copy; 2026 SMR Kid Learning. All rights reserved.
-      </div>
-    </div>
-  </footer>
-
-  <!-- Admin Passcode Modal -->
-  <div id="admin-passcode-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div class="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl border border-slate-100 transform scale-95 opacity-0 transition-all duration-300" id="passcode-container">
-      <div class="flex flex-col items-center text-center space-y-4">
-        <div class="bg-amber-100 p-4 rounded-full text-amber-600">
-          <i data-lucide="lock" class="w-8 h-8"></i>
-        </div>
-        <div>
-          <h3 class="text-2xl font-bold text-slate-950">สำหรับแอดมินผู้ดูแลระบบ</h3>
-          <p class="text-sm text-slate-500 mt-1">โปรดใส่รหัสผ่านเพื่อเข้าสู่ระบบควบคุมหน้าเว็บ</p>
-        </div>
-        
-        <div class="w-full">
-          <input type="password" id="admin-password" placeholder="••••••" class="w-full px-5 py-4 border border-slate-200 rounded-2xl text-center text-2xl tracking-widest font-bold focus:outline-none focus:ring-4 focus:ring-amber-200 focus:border-amber-400 transition-all">
-          <p id="password-error" class="text-red-500 text-xs mt-2 hidden">รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง</p>
-        </div>
-
-        <div class="flex gap-3 w-full pt-2">
-          <button onclick="closeAdminModal()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-all">
-            ยกเลิก
-          </button>
-          <button onclick="verifyPasscode()" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium rounded-xl shadow-lg shadow-orange-100 transition-all">
-            ยืนยันรหัส
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Admin Control Panel Modal -->
-  <div id="admin-control-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4 overflow-y-auto">
-    <div class="bg-white rounded-[2.5rem] w-full max-w-2xl p-6 md:p-8 shadow-2xl border border-slate-100 my-8 transform scale-95 opacity-0 transition-all duration-300" id="control-container">
-      <div class="flex justify-between items-center pb-4 mb-6 border-b border-slate-100">
+    <div id="stats-bar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 glass-panel text-white px-6 py-3 rounded-2xl flex items-center gap-4 sm:gap-6 shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-[100] text-[11px] sm:text-xs font-bold whitespace-nowrap tracking-wide">
         <div class="flex items-center gap-2">
-          <div class="bg-amber-500 text-white p-2 rounded-xl">
-            <i data-lucide="sliders" class="w-5 h-5"></i>
-          </div>
-          <h3 class="text-xl md:text-2xl font-bold text-slate-900">แผงควบคุมระบบหน้าปก</h3>
+            <div class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center"><i class="fas fa-users text-blue-400 text-sm"></i></div>
+            <span class="text-slate-300 font-medium">เข้าชม: <span id="stat-visitors" class="text-white text-[13px] font-bold">...</span></span>
         </div>
-        <button onclick="closeControlModal()" class="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-all">
-          <i data-lucide="x" class="w-6 h-6"></i>
-        </button>
-      </div>
-
-      <div class="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-        <!-- Welcome Text Section -->
-        <div class="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 space-y-4">
-          <h4 class="text-sm font-bold text-amber-800 flex items-center gap-1.5">
-            <i data-lucide="heading" class="w-4 h-4"></i>
-            <span>ข้อความต้อนรับของหน้าเว็บ</span>
-          </h4>
-          <div class="grid grid-cols-1 gap-4">
-            <div>
-              <label class="block text-xs text-slate-500 mb-1.5 font-medium">หัวเรื่องต้อนรับหลัก</label>
-              <input type="text" id="input-welcome-title" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none">
+        <div class="w-px h-5 bg-slate-600 rounded"></div>
+        <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center relative">
+                <div class="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_#4ade80]"></div>
             </div>
-            <div>
-              <label class="block text-xs text-slate-500 mb-1.5 font-medium">คำอธิบายต้อนรับย่อย</label>
-              <textarea id="input-welcome-subtitle" rows="3" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none resize-none"></textarea>
-            </div>
-          </div>
+            <span class="text-slate-300 font-medium">ออนไลน์: <span id="stat-online" class="text-white text-[13px] font-bold">...</span></span>
         </div>
-
-        <!-- Images Section -->
-        <div class="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-4">
-          <h4 class="text-sm font-bold text-indigo-800 flex items-center gap-1.5">
-            <i data-lucide="image" class="w-4 h-4"></i>
-            <span>จัดการรูปภาพภายในเว็บ</span>
-          </h4>
-          
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Hero Image Admin -->
-            <div class="p-3 bg-white rounded-xl border border-slate-100">
-              <span class="block text-xs font-bold text-slate-700 mb-2">1. ภาพประกอบหน้าแรก (Hero)</span>
-              <div class="space-y-2">
-                <input type="file" id="upload-hero" accept="image/*" class="hidden" onchange="handleImageUpload(event, 'hero')">
-                <button onclick="document.getElementById('upload-hero').click()" class="w-full py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5">
-                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> อัปโหลดรูปภาพใหม่
-                </button>
-                <div class="text-center text-[10px] text-slate-400 py-1">หรือระบุด้วย URL ด้านล่าง</div>
-                <input type="text" id="input-hero-url" placeholder="วาง URL ของรูปภาพ..." class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-400">
-              </div>
-            </div>
-
-            <!-- Showcase Image Admin -->
-            <div class="p-3 bg-white rounded-xl border border-slate-100">
-              <span class="block text-xs font-bold text-slate-700 mb-2">2. ภาพกิจกรรมประจำวัน</span>
-              <div class="space-y-2">
-                <input type="file" id="upload-showcase" accept="image/*" class="hidden" onchange="handleImageUpload(event, 'showcase')">
-                <button onclick="document.getElementById('upload-showcase').click()" class="w-full py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5">
-                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> อัปโหลดรูปภาพใหม่
-                </button>
-                <div class="text-center text-[10px] text-slate-400 py-1">หรือระบุด้วย URL ด้านล่าง</div>
-                <input type="text" id="input-showcase-url" placeholder="วาง URL ของรูปภาพ..." class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-400">
-              </div>
-            </div>
-          </div>
+        <div class="w-px h-5 bg-slate-600 rounded"></div>
+        <div class="flex items-center gap-2 relative">
+            <div class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center"><i class="fas fa-user-graduate text-purple-400 text-sm"></i></div>
+            <span class="text-slate-300 font-medium">สมาชิก: <span id="stat-members" class="text-white text-[13px] font-bold">...</span></span>
+            <span id="stat-new-member" class="absolute -top-3 -right-6 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm hidden transition-all duration-300">+1 ใหม่</span>
         </div>
-
-        <!-- YouTube Video Section -->
-        <div class="bg-red-50/50 p-4 rounded-2xl border border-red-100 space-y-4">
-          <h4 class="text-sm font-bold text-red-800 flex items-center gap-1.5">
-            <i data-lucide="youtube" class="w-4 h-4"></i>
-            <span>จัดการวิดีโอแนะนำ (YouTube)</span>
-          </h4>
-          <div>
-            <label class="block text-xs text-slate-500 mb-1.5 font-medium">ระบุ URL หรือลิงก์จาก YouTube</label>
-            <input type="text" id="input-youtube-url" placeholder="ตัวอย่าง: https://www.youtube.com/watch?v=xxxx" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none">
-            <span class="text-[10px] text-slate-400 mt-1 block">รองรับทุกรูปแบบ เช่น youtube.com/watch?v= หรือ youtu.be/ หรือ embed/</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="flex gap-3 pt-6 mt-6 border-t border-slate-100">
-        <button onclick="resetToDefaults()" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition-all flex items-center gap-1.5">
-          <i data-lucide="rotate-ccw" class="w-4 h-4"></i> ค่าตั้งต้น
-        </button>
-        <button onclick="closeControlModal()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition-all">
-          ยกเลิก
-        </button>
-        <button onclick="saveAdminSettings()" class="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium rounded-xl text-sm shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2">
-          <i data-lucide="check" class="w-4 h-4"></i> บันทึกข้อมูล
-        </button>
-      </div>
     </div>
-  </div>
 
-  <!-- Notification Toast (For customized success messages) -->
-  <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white py-3 px-5 rounded-2xl shadow-xl flex items-center gap-2 translate-y-20 opacity-0 transition-all duration-300 z-50">
-    <div id="toast-icon-bg" class="p-1 rounded-lg bg-emerald-500 text-white">
-      <i data-lucide="check" class="w-4 h-4" id="toast-icon"></i>
-    </div>
-    <span id="toast-message" class="text-sm font-medium">ดำเนินการเสร็จเรียบร้อย!</span>
-  </div>
+    <script type="module">
+        // Import Firebase SDK (v9 Modular)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getDatabase, ref, get, set, update, onValue, off } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-  <script>
-    // System Constants & Storage Keys
-    const ADMIN_PASSCODE = "1471200";
-    const DB_URL = "https://tess-mode-default-rtdb.asia-southeast1.firebasedatabase.app/landing_data.json";
-    
-    // Default Web Page Settings
-    const DEFAULT_SETTINGS = {
-      welcomeTitle: "ยินดีต้อนรับสู่ แหล่งเรียนรู้แสนสนุก!",
-      welcomeSubtitle: "พัฒนาทักษะและสมอง เสริมสร้างปัญญา ผ่านบทเรียนและเกมสร้างสรรค์สำหรับเด็กยุคใหม่ พัฒนาการดีขึ้นอย่างเห็นได้ชัด",
-      heroImage: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80",
-      showcaseImage: "https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=800&q=80",
-      youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    };
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAjIHXXbkaDllqHxsp01QT08T6MyLWziqI",
+            authDomain: "test-mode-175a8.firebaseapp.com",
+            databaseURL: "https://test-mode-175a8-default-rtdb.firebaseio.com",
+            projectId: "test-mode-175a8",
+            storageBucket: "test-mode-175a8.firebasestorage.app",
+            messagingSenderId: "123405704419",
+            appId: "1:123405704419:web:67b0e9cadfc7a849fef9d6",
+            measurementId: "G-0Q71472SSS"
+        };
 
-    // Current State (Initialized from Default, stored in JS runtime memory)
-    let appState = { ...DEFAULT_SETTINGS };
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const googleProvider = new GoogleAuthProvider();
 
-    // Function to parse YouTube Video ID from any youtube link
-    function getYouTubeId(url) {
-      if (!url) return null;
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-      const match = url.match(regExp);
-      return (match && match[2].length === 11) ? match[2] : null;
-    }
+        const FIREBASE_DB_URL = firebaseConfig.databaseURL; // สำหรับ sendBeacon ตอนปิดหน้าเว็บ
 
-    // Function to update the page view based on the current state
-    function updateDOM() {
-      document.getElementById('display-welcome-title').innerText = appState.welcomeTitle;
-      document.getElementById('display-welcome-subtitle').innerText = appState.welcomeSubtitle;
-      document.getElementById('display-hero-image').src = appState.heroImage;
-      document.getElementById('display-showcase-image').src = appState.showcaseImage;
+        // --- GLOBAL VARIABLES ---
+        let currentUser = null;
+        let creditListenerRef = null;
 
-      // Extract YouTube Video
-      const ytId = getYouTubeId(appState.youtubeUrl);
-      if (ytId) {
-        document.getElementById('display-youtube-iframe').src = `https://www.youtube.com/embed/${ytId}`;
-      } else {
-        document.getElementById('display-youtube-iframe').src = "https://www.youtube.com/embed/dQw4w9WgXcQ"; // Fallback to classic rickroll if empty/invalid
-      }
+        // --- SOUND ENGINE (Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        let motorOsc = null;
+        let motorGain = null;
+        let motorFilter = null;
+        let wasMotorSpinningGlobal = false;
 
-      // Sync Admin Form Inputs
-      document.getElementById('input-welcome-title').value = appState.welcomeTitle;
-      document.getElementById('input-welcome-subtitle').value = appState.welcomeSubtitle;
-      document.getElementById('input-hero-url').value = appState.heroImage.startsWith('data:') ? "" : appState.heroImage;
-      document.getElementById('input-showcase-url').value = appState.showcaseImage.startsWith('data:') ? "" : appState.showcaseImage;
-      document.getElementById('input-youtube-url').value = appState.youtubeUrl;
-    }
+        const SoundEngine = {
+            isMuted: false,
+            init: function() {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            },
+            toggleMute: function() {
+                this.isMuted = !this.isMuted;
+                const icon = document.getElementById('icon-sound');
+                if (this.isMuted) {
+                    icon.className = 'fas fa-volume-mute text-red-400';
+                    this.stopMotor(); 
+                } else {
+                    icon.className = 'fas fa-volume-up text-white';
+                }
+                sysLog(this.isMuted ? "ปิดเสียง (Sound Muted)" : "เปิดเสียง (Sound Unmuted)");
+                this.init();
+            },
+            playClick: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(400, t);
+                osc.frequency.exponentialRampToValueAtTime(50, t + 0.08);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.08);
+            },
+            playBreaker: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.exponentialRampToValueAtTime(10, t + 0.1);
+                gain.gain.setValueAtTime(0.8, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.1);
+            },
+            playTrip: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1200, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.15);
+                gain.gain.setValueAtTime(1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.15);
+            },
+            playExplosion: function() {
+                if (this.isMuted) return;
+                this.init();
+                const t = audioCtx.currentTime;
+                const duration = 1.5;
+                const bufferSize = audioCtx.sampleRate * duration;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1; 
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, t);
+                filter.frequency.exponentialRampToValueAtTime(50, t + duration); 
+                
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(1.5, t); 
+                gain.gain.exponentialRampToValueAtTime(0.01, t + duration);
+                
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                noise.start(t);
+            },
+            startMotor: function() {
+                if (this.isMuted) return;
+                this.init();
+                if (motorOsc) return; 
+                
+                motorOsc = audioCtx.createOscillator();
+                motorGain = audioCtx.createGain();
+                motorFilter = audioCtx.createBiquadFilter();
+                
+                motorOsc.type = 'sawtooth';
+                motorOsc.frequency.value = 55; 
+                
+                motorFilter.type = 'lowpass';
+                motorFilter.frequency.value = 400; 
+                
+                motorGain.gain.value = 0.2; 
+                
+                motorOsc.connect(motorFilter);
+                motorFilter.connect(motorGain);
+                motorGain.connect(audioCtx.destination);
+                
+                motorOsc.start();
+            },
+            stopMotor: function() {
+                if (motorOsc) {
+                    motorOsc.stop();
+                    motorOsc.disconnect();
+                    motorFilter.disconnect();
+                    motorGain.disconnect();
+                    motorOsc = null;
+                    motorGain = null;
+                    motorFilter = null;
+                }
+            }
+        };
 
-    // Modal Control Functions
-    function openAdminModal() {
-      const modal = document.getElementById('admin-passcode-modal');
-      const container = document.getElementById('passcode-container');
-      document.getElementById('admin-password').value = "";
-      document.getElementById('password-error').classList.add('hidden');
-      
-      modal.classList.remove('hidden');
-      setTimeout(() => {
-        container.classList.remove('scale-95', 'opacity-0');
-        container.classList.add('scale-100', 'opacity-100');
-        document.getElementById('admin-password').focus();
-      }, 50);
-    }
+        document.body.addEventListener('click', () => {
+            SoundEngine.init();
+        }, { once: true });
 
-    function closeAdminModal() {
-      const modal = document.getElementById('admin-passcode-modal');
-      const container = document.getElementById('passcode-container');
-      
-      container.classList.remove('scale-100', 'opacity-100');
-      container.classList.add('scale-95', 'opacity-0');
-      setTimeout(() => {
-        modal.classList.add('hidden');
-      }, 300);
-    }
 
-    function verifyPasscode() {
-      const passwordInput = document.getElementById('admin-password').value;
-      if (passwordInput === ADMIN_PASSCODE) {
-        closeAdminModal();
-        showToast("ยืนยันรหัสผ่านเรียบร้อย ยินดีต้อนรับครับ!", "check", "bg-emerald-500");
-        setTimeout(openControlModal, 400);
-      } else {
-        const errorMsg = document.getElementById('password-error');
-        errorMsg.classList.remove('hidden');
-        errorMsg.classList.add('animate-bounce');
-        setTimeout(() => errorMsg.classList.remove('animate-bounce'), 1000);
-      }
-    }
-
-    function openControlModal() {
-      const modal = document.getElementById('admin-control-modal');
-      const container = document.getElementById('control-container');
-      
-      // Update fields to match current state
-      updateDOM();
-
-      modal.classList.remove('hidden');
-      setTimeout(() => {
-        container.classList.remove('scale-95', 'opacity-0');
-        container.classList.add('scale-100', 'opacity-100');
-      }, 50);
-    }
-
-    function closeControlModal() {
-      const modal = document.getElementById('admin-control-modal');
-      const container = document.getElementById('control-container');
-      
-      container.classList.remove('scale-100', 'opacity-100');
-      container.classList.add('scale-95', 'opacity-0');
-      setTimeout(() => {
-        modal.classList.add('hidden');
-      }, 300);
-    }
-
-    // Handle Local Image Uploads (Convert to base64)
-    function handleImageUpload(event, type) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const base64Data = e.target.result;
-        if (type === 'hero') {
-          appState.heroImage = base64Data;
-          document.getElementById('input-hero-url').value = ""; // Clear URL field to prefer file upload
-          showToast("อัปโหลดรูปภาพหลัก (Hero) แล้วเรียบร้อย!", "image", "bg-indigo-500");
-        } else if (type === 'showcase') {
-          appState.showcaseImage = base64Data;
-          document.getElementById('input-showcase-url').value = ""; // Clear URL field to prefer file upload
-          showToast("อัปโหลดรูปภาพกิจกรรมแล้วเรียบร้อย!", "image", "bg-indigo-500");
+        function showLoginMsg(msg, isSuccess = false) {
+            const msgEl = document.getElementById('loginMsg');
+            msgEl.textContent = msg;
+            msgEl.className = `mt-4 text-center text-sm font-bold py-2 rounded-xl border ${isSuccess ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-500 bg-red-50 border-red-100'}`;
+            msgEl.classList.remove('hidden');
         }
-      };
-      reader.readAsDataURL(file);
-    }
 
-    // Save New Settings
-    async function saveAdminSettings() {
-      // Fetch text inputs
-      appState.welcomeTitle = document.getElementById('input-welcome-title').value.trim() || DEFAULT_SETTINGS.welcomeTitle;
-      appState.welcomeSubtitle = document.getElementById('input-welcome-subtitle').value.trim() || DEFAULT_SETTINGS.welcomeSubtitle;
-      
-      // Fetch Image URLs (Only override if they entered anything, otherwise keep existing/uploaded)
-      const inputHeroUrl = document.getElementById('input-hero-url').value.trim();
-      if (inputHeroUrl) appState.heroImage = inputHeroUrl;
+        // --- CREDIT SYSTEM (FIREBASE REALTIME LISTENER) ---
+        function updateCreditDisplay() {
+            const el = document.getElementById('userCredits');
+            if(el && currentUser) {
+                el.innerHTML = `<i class="fas fa-coins text-yellow-400"></i> ${currentUser.credits.toLocaleString()}`;
+            }
+        }
 
-      const inputShowcaseUrl = document.getElementById('input-showcase-url').value.trim();
-      if (inputShowcaseUrl) appState.showcaseImage = inputShowcaseUrl;
+        function startCreditPolling() {
+            if (!currentUser || !currentUser.safeKey) return;
+            // ใช้ onValue เพื่อฟังการเปลี่ยนแปลงจาก Firebase ทันทีแบบ Realtime
+            const userCreditRef = ref(db, `users/${currentUser.safeKey}/credits`);
+            creditListenerRef = onValue(userCreditRef, (snapshot) => {
+                const serverCredits = snapshot.val();
+                if (serverCredits !== null && serverCredits !== currentUser.credits) {
+                    currentUser.credits = serverCredits;
+                    updateCreditDisplay();
+                }
+            }, (error) => {
+                console.error("Firebase Realtime Listener Error:", error);
+            });
+        }
 
-      // Fetch YouTube Video Url
-      appState.youtubeUrl = document.getElementById('input-youtube-url').value.trim() || DEFAULT_SETTINGS.youtubeUrl;
+        function stopCreditPolling() {
+            if (creditListenerRef && currentUser && currentUser.safeKey) {
+                const userCreditRef = ref(db, `users/${currentUser.safeKey}/credits`);
+                off(userCreditRef); // ยกเลิกการฟังเมื่อออกจากระบบ
+                creditListenerRef = null;
+            }
+        }
 
-      // Save to Firebase DB
-      try {
-        const response = await fetch(DB_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(appState)
+        // ฟังก์ชันหักเครดิต (ใช้ get และ update ของ Firebase SDK)
+        async function syncDeductCredits(amount, reason, force = false) {
+            if (!currentUser) return false;
+            
+            // ตรวจจับกลลวงแอบส่งค่าหักเงินเป็นลบ เพื่อหวังเติมเครดิต (- - เป็น +)
+            if (amount < 0) {
+                sysLog("❌ แจ้งเตือน: ตรวจพบความพยายามเรียกใช้คำสั่งหักเครดิตด้วยยอดติดลบเพื่อปั๊มเครดิต!");
+                alert("เกิดข้อผิดพลาดในการทำธุรกรรม: ไม่อนุญาตให้ใช้พารามิเตอร์ลบ");
+                return false;
+            }
+
+            if (!currentUser.safeKey) return false;
+
+            const userCreditRef = ref(db, `users/${currentUser.safeKey}/credits`);
+
+            try {
+                // ดึงเครดิตล่าสุดก่อนหักเงินเสมอ 
+                const snapshot = await get(userCreditRef);
+                if (snapshot.exists()) {
+                    currentUser.credits = snapshot.val();
+                }
+            } catch (err) {
+                console.error("Failed to fetch latest credits", err);
+            }
+
+            if (!force && currentUser.credits < amount) {
+                sysLog(`❌ เครดิตไม่พอสำหรับ ${reason} (ต้องการ ${amount} 🪙)`);
+                alert(`เครดิตไม่พอ! (ต้องการ ${amount} 🪙 สำหรับ ${reason})`);
+                return false;
+            }
+
+            // คำนวณยอดใหม่และอัปเดต UI ทันที
+            currentUser.credits -= amount;
+            updateCreditDisplay();
+            sysLog(`🪙 หัก ${amount} เครดิต (${reason}) คงเหลือ: ${currentUser.credits}`);
+            
+            // ส่งข้อมูลอัปเดตกลับไปยังเซิร์ฟเวอร์
+            try {
+                await update(ref(db, `users/${currentUser.safeKey}`), { 
+                    credits: currentUser.credits 
+                });
+            } catch (e) {
+                console.error("Failed to update credits on server", e);
+            }
+            
+            return true;
+        }
+
+        // --- AUTHENTICATION EVENTS ---
+        document.getElementById('btn-google-login').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-google-login');
+            document.getElementById('loginMsg').classList.add('hidden');
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> กำลังตรวจสอบ...`;
+            btn.disabled = true;
+
+            try {
+                await signInWithPopup(auth, googleProvider);
+            } catch (err) {
+                showLoginMsg("ยกเลิกหรือเกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google");
+                console.error("Google Auth Error:", err);
+                btn.innerHTML = `<img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6 inline-block mr-2"> เข้าสู่ระบบด้วย Google`;
+                btn.disabled = false;
+            }
         });
-        if(response.ok) {
-          showToast("บันทึกข้อมูลลงฐานข้อมูลสำเร็จ!", "check", "bg-emerald-500");
+
+        // ตรวจจับการเปลี่ยนแปลงสถานะล็อกอินของ Firebase
+        onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                const userRef = ref(db, 'users/' + firebaseUser.uid);
+                const snapshot = await get(userRef);
+                let user = snapshot.val();
+                
+                // ถ้ายังไม่เคยมีบัญชี (เข้าครั้งแรก) ให้สร้างพร้อมแจกเครดิต
+                if (!user) {
+                    user = {
+                        name: firebaseUser.displayName || "นักเรียน",
+                        email: firebaseUser.email,
+                        credits: 1000
+                    };
+                    await set(userRef, user);
+                }
+
+                user.safeKey = firebaseUser.uid;
+                currentUser = user;
+
+                // Update UI
+                document.getElementById('authOverlay').classList.add('hidden');
+                document.getElementById('userProfileBadge').classList.remove('hidden');
+                document.getElementById('userProfileBadge').classList.add('flex');
+                document.getElementById('userNameDisplay').textContent = currentUser.name;
+                
+                document.getElementById('creditBadge').classList.remove('hidden');
+                document.getElementById('creditBadge').classList.add('flex');
+                updateCreditDisplay();
+
+                sysLog(`เข้าสู่ระบบผ่าน Google ในชื่อ: ${currentUser.name}`);
+                startCreditPolling();
+                
+                const btn = document.getElementById('btn-google-login');
+                btn.innerHTML = `<img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6 inline-block mr-2"> เข้าสู่ระบบด้วย Google`;
+                btn.disabled = false;
+            } else {
+                currentUser = null;
+                document.getElementById('authOverlay').classList.remove('hidden');
+                document.getElementById('userProfileBadge').classList.add('hidden');
+                document.getElementById('userProfileBadge').classList.remove('flex');
+                document.getElementById('creditBadge').classList.add('hidden');
+                document.getElementById('creditBadge').classList.remove('flex');
+                stopCreditPolling();
+            }
+        });
+
+        function logoutUser() {
+            signOut(auth).then(() => {
+                stopCreditPolling();
+                currentUser = null;
+                
+                // ล้างอุปกรณ์บนกระดานเมื่อล็อกเอาต์
+                wires.forEach(w => w.pathElement.remove()); wires = [];
+                document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+                historyStack = [];
+                sysLog("ออกจากระบบเรียบร้อยแล้ว");
+            });
         }
-      } catch (error) {
-        console.error("Error saving to DB:", error);
-        showToast("บันทึกสำเร็จ แต่เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล", "alert-triangle", "bg-amber-500");
-      }
 
-      // Apply changes to UI
-      updateDOM();
-      closeControlModal();
-    }
+        document.getElementById('btn-logout').addEventListener('click', logoutUser);
 
-    // Reset back to system default values
-    async function resetToDefaults() {
-      if (confirm("คุณแน่ใจหรือไม่ว่าต้องการคืนค่าเริ่มต้นทั้งหมด? ข้อมูลที่แก้ไขจะหายไป")) {
-        appState = { ...DEFAULT_SETTINGS };
+
+        // --- State Variables ---
+        let components = {};
+        let wires = [];
+        let historyStack = [];
         
-        try {
-          await fetch(DB_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(appState)
-          });
-        } catch (error) {
-          console.error("Error resetting DB:", error);
+        // Workspace Pan/Zoom
+        const workspace = document.getElementById('workspace');
+        const canvasLayer = document.getElementById('canvas-layer');
+        const wireLayer = document.getElementById('wire-layer');
+        const colorSelect = document.getElementById('wire-color-select');
+        const sysLogEl = document.getElementById('sys-log');
+        const propertiesPanel = document.getElementById('properties-panel');
+        const propertiesContent = document.getElementById('properties-content');
+
+        let currentScale = 1;
+        let panX = 0, panY = 0;
+        let initialPanX = 0, initialPanY = 0;
+        let isPanning = false;
+        let panStartX = 0, panStartY = 0;
+
+        // Simulator Engine Variables
+        let simulationActive = false;
+        let isExploding = false;
+        
+        // Thermal Overload Simulation Tracking
+        let thermalOverloadHeat = 0; 
+        let thermalInterval = null;  
+        
+        function sysLog(msg) {
+            const time = new Date().toLocaleTimeString('th-TH', { hour12: false });
+            const div = document.createElement('div');
+            if(msg.includes("💥") || msg.includes("⚠️") || msg.includes("❌")) div.innerHTML = `<span class="text-red-400">[${time}]</span> <span class="text-red-400 font-bold">${msg}</span>`;
+            else div.innerHTML = `<span class="text-blue-400 font-medium">[${time}]</span> ${msg}`;
+            sysLogEl.appendChild(div);
+            sysLogEl.scrollTop = sysLogEl.scrollHeight;
         }
 
-        updateDOM();
-        closeControlModal();
-        showToast("รีเซ็ตหน้าจอเป็นค่าตั้งต้นเรียบร้อยแล้ว", "rotate-ccw", "bg-amber-500");
-      }
-    }
-
-    // Toast Notification controller
-    function showToast(message, iconName, bgClass) {
-      const toast = document.getElementById('toast');
-      const toastMsg = document.getElementById('toast-message');
-      const toastIconBg = document.getElementById('toast-icon-bg');
-      
-      // Update toast UI
-      toastMsg.innerText = message;
-      toastIconBg.className = `p-1 rounded-lg ${bgClass} text-white`;
-      
-      const iconEl = document.getElementById('toast-icon');
-      iconEl.setAttribute('data-lucide', iconName);
-      lucide.createIcons();
-
-      // Trigger animation
-      toast.classList.remove('translate-y-20', 'opacity-0');
-      toast.classList.add('translate-y-0', 'opacity-100');
-
-      setTimeout(() => {
-        toast.classList.remove('translate-y-0', 'opacity-100');
-        toast.classList.add('translate-y-20', 'opacity-0');
-      }, 3500);
-    }
-
-    // On Load Initialization
-    window.onload = async function() {
-      // Render Lucide icons
-      lucide.createIcons();
-      
-      // Fetch data from Firebase Realtime Database
-      try {
-        const response = await fetch(DB_URL);
-        if (response.ok) {
-          const data = await response.json();
-          if (data) {
-            // Merge defaults with DB data
-            appState = { ...DEFAULT_SETTINGS, ...data };
-          }
+        // --- Workspace Controls ---
+        function updateCanvasTransform() {
+            canvasLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${currentScale})`;
+            workspace.style.backgroundPosition = `${panX}px ${panY}px`;
+            workspace.style.backgroundSize = `${20 * currentScale}px ${20 * currentScale}px`;
         }
-      } catch (error) {
-        console.error("Error loading from DB, using default settings:", error);
-      }
 
-      // Apply data to UI
-      updateDOM();
+        workspace.addEventListener('wheel', (e) => {
+            if (e.target === workspace || e.target === canvasLayer || e.target.id === 'wire-layer' || e.target.closest('.draggable-item')) {
+                e.preventDefault();
+                const zoomSensitivity = 0.002;
+                const delta = e.deltaY * -zoomSensitivity;
+                const newScale = Math.min(Math.max(0.4, currentScale + delta), 2.5);
+                
+                const rect = workspace.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
 
-      // Setup Enter key support for password field
-      document.getElementById('admin-password').addEventListener('keyup', function(event) {
-        if (event.key === 'Enter') {
-          verifyPasscode();
+                panX = mouseX - (mouseX - panX) * (newScale / currentScale);
+                panY = mouseY - (mouseY - panY) * (newScale / currentScale);
+                
+                currentScale = newScale;
+                initialPanX = panX;
+                initialPanY = panY;
+                updateCanvasTransform();
+            }
+        }, { passive: false });
+
+        workspace.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; 
+            if (isWiring || e.target.closest('.btn-head') || e.target.closest('.breaker-switch') || e.target.closest('.breaker3p-handle') || e.target.closest('.overload-trip-btn') || e.target.closest('.overload-reset-btn') || e.target.tagName === 'INPUT' || e.target.closest('button')) return; 
+            
+            if (e.target === workspace || e.target === canvasLayer || e.target.id === 'wire-layer') {
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                deselectElement();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX = initialPanX + (e.clientX - panStartX);
+                panY = initialPanY + (e.clientY - panStartY);
+                updateCanvasTransform();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isPanning) {
+                isPanning = false;
+                initialPanX = panX;
+                initialPanY = panY;
+            }
+        });
+
+        // --- Programmatic Component Library Binding ---
+        document.querySelectorAll('.library-item').forEach(item => {
+            const compType = item.dataset.compType;
+            item.setAttribute('draggable', 'true');
+            
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', compType);
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+            
+            item.addEventListener('click', () => {
+                spawnComponent(compType);
+            });
+        });
+
+        workspace.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            if (type) {
+                const canvasRect = canvasLayer.getBoundingClientRect();
+                const dropX = (e.clientX - canvasRect.left) / currentScale;
+                const dropY = (e.clientY - canvasRect.top) / currentScale;
+                spawnComponent(type, dropX - 40, dropY - 40);
+            }
+        });
+
+        // --- Component Generation ---
+        function getComponentHTML(type, compId) {
+            if (type === 'mainbox') {
+                return `
+                    <div class="comp-mainbox" data-breaker="off">
+                        <div class="absolute top-4 left-6 text-xl font-black text-slate-800 tracking-tight">MDB <span class="text-sm font-bold text-slate-500">Main Breaker Box</span></div>
+                        <div class="box-warning">⚡</div>
+                        
+                        <div class="breaker-switch" title="คลิกเพื่อสับเบรกเกอร์ (ON/OFF)">
+                            <div class="breaker-handle"></div>
+                            <span class="absolute -left-12 text-base font-bold text-slate-500">ON</span>
+                            <span class="absolute -left-14 bottom-2 text-base font-bold text-slate-500">OFF</span>
+                        </div>
+                        
+                        <div class="absolute top-[170px] left-[40px] w-[180px] flex justify-between px-1 text-base font-bold text-slate-500">
+                            <span>L1</span><span>L2</span><span>L3</span>
+                        </div>
+
+                        <div class="absolute top-[195px] left-[40px] w-[180px] flex justify-between">
+                            <div class="terminal terminal-lg" id="term-${compId}-L1" style="position:relative; background:linear-gradient(135deg, #a78bfa, #8b5cf6);" title="L1 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L2" style="position:relative; background:linear-gradient(135deg, #34d399, #10b981);" title="L2 Out"></div>
+                            <div class="terminal terminal-lg" id="term-${compId}-L3" style="position:relative; background:linear-gradient(135deg, #fbbf24, #f59e0b);" title="L3 Out"></div>
+                        </div>
+
+                        <div class="busbar neutral flex justify-around items-center px-8">
+                            <span class="absolute -left-10 text-xl font-bold text-blue-700">N</span>
+                            <div class="terminal terminal-md" id="term-${compId}-N1" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N2" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-N3" style="position:static; background:linear-gradient(135deg, #60a5fa, #3b82f6);" title="Neutral"></div>
+                        </div>
+
+                        <div class="busbar ground flex justify-around items-center px-8">
+                            <span class="absolute -left-12 text-xl font-bold text-green-700">PE</span>
+                            <div class="terminal terminal-md" id="term-${compId}-PE1" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE2" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
+                            <div class="terminal terminal-md" id="term-${compId}-PE3" style="position:static; background:linear-gradient(135deg, #4ade80, #22c55e);" title="Ground (PE)"></div>
+                        </div>
+                    </div>`;
+            } 
+            else if (type === 'breaker3p') {
+                return `
+                    <div class="comp-breaker3p off" data-state="off">
+                        <div class="absolute top-1.5 text-[9px] font-black text-slate-400 tracking-widest w-full text-center">MCCB</div>
+                        
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="L1 In"></div>
+                        
+                        <div class="terminal-plate" style="left: 54px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 56px; top: 17px;" title="L2 In"></div>
+                        
+                        <div class="terminal-plate" style="left: 93px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 95px; top: 17px;" title="L3 In"></div>
+
+                        <div style="position: absolute; top: 60px; left: 8px; right: 8px; height: 70px; background: linear-gradient(180deg, #f8fafc, #f1f5f9); border: 1px solid #cbd5e1; border-radius: 4px; display:flex; align-items:center; justify-content:space-between; padding: 0 5px;">
+                            <div style="font-size: 18px; font-weight: 900; color: #94a3b8; font-family: 'Inter', sans-serif;">100<span style="font-size:10px;">A</span></div>
+                        </div>
+
+                        <div class="breaker3p-switch-container">
+                            <div class="breaker3p-bg-on">ON</div>
+                            <div class="breaker3p-handle" title="คลิกเพื่อสับเบรกเกอร์"></div>
+                            <div class="breaker3p-bg-off">OFF</div>
+                        </div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 155px;" title="T1 Out"></div>
+                        
+                        <div class="terminal-plate" style="left: 54px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 56px; top: 155px;" title="T2 Out"></div>
+                        
+                        <div class="terminal-plate" style="left: 93px; top: 153px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 95px; top: 155px;" title="T3 Out"></div>
+                    </div>`;
+            }
+            else if (type === 'contactor') {
+                return `
+                    <div class="comp-contactor">
+                        <div class="sn10-core-bg"></div>
+                        <div class="contactor-core">
+                            <div class="core-hole"></div>
+                            <div class="core-hole"></div>
+                        </div>
+                        <div class="sn10-label">S-N10</div>
+                        <div class="absolute" style="right: 15px; top: 112px; font-size: 8px; font-weight: 800; color: #64748b; z-index: 3;">18.5S<br>Ith=20A</div>
+                        
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="Main 1/L1"></div>
+                        <div class="sn10-text" style="left: 11px; top: 40px;">1/L1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 52px; top: 17px;" title="Main 3/L2"></div>
+                        <div class="sn10-text" style="left: 46px; top: 40px;">3/L2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 87px; top: 17px;" title="Main 5/L3"></div>
+                        <div class="sn10-text" style="left: 81px; top: 40px;">5/L3</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-13" style="left: 122px; top: 17px;" title="Aux 13 NO"></div>
+                        <div class="sn10-text" style="left: 116px; top: 40px;">13 NO</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 60px;"></div>
+                        <div class="terminal" id="term-${compId}-A1" style="left: 17px; top: 62px;" title="Coil A1"></div>
+                        <div class="sn10-text black" style="left: 11px; top: 85px;">A1</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 60px;"></div>
+                        <div class="terminal" id="term-${compId}-21" style="left: 122px; top: 62px;" title="Aux 21 NC"></div>
+                        <div class="sn10-text black" style="left: 116px; top: 85px;">21 NC</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-A2" style="left: 17px; top: 147px;" title="Coil A2"></div>
+                        <div class="sn10-text black" style="left: 11px; top: 133px;">A2</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-22" style="left: 122px; top: 147px;" title="Aux 22 NC"></div>
+                        <div class="sn10-text black" style="left: 116px; top: 133px;">22 NC</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 192px;" title="Main 2/T1"></div>
+                        <div class="sn10-text" style="left: 11px; top: 178px;">2/T1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 52px; top: 192px;" title="Main 4/T2"></div>
+                        <div class="sn10-text" style="left: 46px; top: 178px;">4/T2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 87px; top: 192px;" title="Main 6/T3"></div>
+                        <div class="sn10-text" style="left: 81px; top: 178px;">6/T3</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 190px;"></div>
+                        <div class="terminal" id="term-${compId}-14" style="left: 122px; top: 192px;" title="Aux 14 NO"></div>
+                        <div class="sn10-text" style="left: 116px; top: 178px;">14 NO</div>
+                    </div>`;
+            }
+            else if (type === 'overload') {
+                return `
+                    <div class="comp-overload" data-tripped="false">
+                        <div class="overload-label" style="top: 110px;">TH-N12</div>
+                        <div class="overload-dial" title="ปรับตั้งพิกัดกระแส (Amps)"></div>
+                        <button class="overload-trip-btn font-bold" title="คลิกเพื่อจำลองทริป (Test Trip)">TRIP</button>
+                        <button class="overload-reset-btn font-bold" title="คลิกเพื่อรีเซ็ตโอเวอร์โหลด">R</button>
+
+                        <div class="thermal-bar-container" title="ความร้อนสะสมโอเวอร์โหลด (Overload Heat Accumulation)">
+                            <div class="thermal-bar" id="heat-bar-${compId}"></div>
+                        </div>
+
+                        <div class="ov-info absolute" style="left: 12px; top: 135px; font-size: 8px; font-weight: 800; color: #64748b; line-height:1.2;">
+                            RC: 9 A<br>95-96: NC<br>97-98: NO
+                        </div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L1" style="left: 17px; top: 17px;" title="Overload 1/L1 (In)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 4px; color:#94a3b8;">1/L1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L2" style="left: 52px; top: 17px;" title="Overload 3/L2 (In)"></div>
+                        <div class="sn10-text" style="left: 46px; top: 4px; color:#94a3b8;">3/L2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 15px;"></div>
+                        <div class="terminal" id="term-${compId}-L3" style="left: 87px; top: 17px;" title="Overload 5/L3 (In)"></div>
+                        <div class="sn10-text" style="left: 81px; top: 4px; color:#94a3b8;">5/L3</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 48px;"></div>
+                        <div class="terminal" id="term-${compId}-95" style="left: 122px; top: 50px;" title="Aux 95 NC"></div>
+                        <div class="sn10-text" style="left: 114px; top: 38px; color:#ef4444; font-size:8px;">95 NC</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 82px;"></div>
+                        <div class="terminal" id="term-${compId}-96" style="left: 122px; top: 84px;" title="Aux 96 NC"></div>
+                        <div class="sn10-text" style="left: 114px; top: 72px; color:#ef4444; font-size:8px;">96 NC</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 115px;"></div>
+                        <div class="terminal" id="term-${compId}-97" style="left: 122px; top: 117px;" title="Aux 97 NO"></div>
+                        <div class="sn10-text" style="left: 114px; top: 105px; color:#10b981; font-size:8px;">97 NO</div>
+
+                        <div class="terminal-plate" style="left: 120px; top: 148px;"></div>
+                        <div class="terminal" id="term-${compId}-98" style="left: 122px; top: 150px;" title="Aux 98 NO"></div>
+                        <div class="sn10-text" style="left: 114px; top: 138px; color:#10b981; font-size:8px;">98 NO</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T1" style="left: 17px; top: 157px;" title="Overload 2/T1 (Out)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 143px; color:#94a3b8;">2/T1</div>
+
+                        <div class="terminal-plate" style="left: 50px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T2" style="left: 52px; top: 157px;" title="Overload 4/T2 (Out)"></div>
+                        <div class="sn10-text" style="left: 46px; top: 143px; color:#94a3b8;">4/T2</div>
+
+                        <div class="terminal-plate" style="left: 85px; top: 155px;"></div>
+                        <div class="terminal" id="term-${compId}-T3" style="left: 87px; top: 157px;" title="Overload 6/T3 (Out)"></div>
+                        <div class="sn10-text" style="left: 81px; top: 143px; color:#94a3b8;">6/T3</div>
+                    </div>`;
+            }
+            else if (type === 'button_no') {
+                return `
+                    <div class="comp-button">
+                        <div class="absolute top-[32px] text-[10px] font-black text-slate-500 tracking-widest">START</div>
+                        <div class="btn-head btn-green"></div>
+                        
+                        <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
+                        <div class="terminal-label text-red-500" style="left: 14px; top: 26px; font-size:8px;">1</div>
+                        <div class="terminal" id="term-${compId}-2" style="right: 10px; top: 10px;" title="NC (2)"></div>
+                        <div class="terminal-label text-red-500" style="right: 14px; top: 26px; font-size:8px;">2</div>
+
+                        <div class="terminal" id="term-${compId}-3" style="left: 10px; bottom: 10px;" title="NO (3)"></div>
+                        <div class="terminal-label text-green-600" style="left: 14px; bottom: 26px; font-size:8px;">3</div>
+                        <div class="terminal" id="term-${compId}-4" style="right: 10px; bottom: 10px;" title="NO (4)"></div>
+                        <div class="terminal-label text-green-600" style="right: 14px; bottom: 26px; font-size:8px;">4</div>
+                    </div>`;
+            }
+            else if (type === 'button_nc') {
+                return `
+                    <div class="comp-button">
+                        <div class="absolute top-[32px] text-[10px] font-black text-slate-500 tracking-widest">STOP</div>
+                        <div class="btn-head btn-red"></div>
+                        
+                        <div class="terminal" id="term-${compId}-1" style="left: 10px; top: 10px;" title="NC (1)"></div>
+                        <div class="terminal-label text-red-500" style="left: 14px; top: 26px; font-size:8px;">1</div>
+                        <div class="terminal" id="term-${compId}-2" style="right: 10px; top: 10px;" title="NC (2)"></div>
+                        <div class="terminal-label text-red-500" style="right: 14px; top: 26px; font-size:8px;">2</div>
+
+                        <div class="terminal" id="term-${compId}-3" style="left: 10px; bottom: 10px;" title="NO (3)"></div>
+                        <div class="terminal-label text-green-600" style="left: 14px; bottom: 26px; font-size:8px;">3</div>
+                        <div class="terminal" id="term-${compId}-4" style="right: 10px; bottom: 10px;" title="NO (4)"></div>
+                        <div class="terminal-label text-green-600" style="right: 14px; bottom: 26px; font-size:8px;">4</div>
+                    </div>`;
+            }
+            else if (type === 'lamp') {
+                return `
+                    <div class="comp-lamp" data-color="green">
+                        <div class="lamp-bulb color-green"></div>
+                        <div class="terminal" id="term-${compId}-x1" style="left: 5px; bottom: 10px;" title="X1"></div><div class="terminal-label" style="left: 6px; bottom: -6px; font-size:8px;">X1</div>
+                        <div class="terminal" id="term-${compId}-x2" style="right: 5px; bottom: 10px;" title="X2"></div><div class="terminal-label" style="right: 6px; bottom: -6px; font-size:8px;">X2</div>
+                    </div>`;
+            }
+            else if (type === 'motor') {
+                return `
+                    <div class="comp-motor" data-load="60" data-running="false" data-start-time="0" data-current-amps="0" data-connection-type="NONE">
+                        <div class="motor-terminal-box">
+                            <div class="flex justify-between w-full">
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">U1</span><div class="terminal" id="term-${compId}-U1" style="position:relative;" title="U1"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">V1</span><div class="terminal" id="term-${compId}-V1" style="position:relative;" title="V1"></div></div>
+                                <div class="relative flex flex-col items-center"><span class="text-[8px] font-bold text-slate-300 mb-0.5">W1</span><div class="terminal" id="term-${compId}-W1" style="position:relative;" title="W1"></div></div>
+                            </div>
+                            <div class="flex justify-between w-full">
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-W2" style="position:relative;" title="W2"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">W2</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-U2" style="position:relative;" title="U2"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">U2</span></div>
+                                <div class="relative flex flex-col items-center"><div class="terminal" id="term-${compId}-V2" style="position:relative;" title="V2"></div><span class="text-[8px] font-bold text-slate-300 mt-0.5">V2</span></div>
+                            </div>
+                            <div class="absolute -right-7 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                                <div class="terminal" id="term-${compId}-PE" style="position:relative; background:linear-gradient(135deg, #4ade80, #22c55e);" title="PE (Ground)"></div>
+                                <span class="text-[8px] text-green-400 font-bold mt-0.5">PE</span>
+                            </div>
+                        </div>
+                        <div class="motor-body">
+                            <div class="motor-rotor"></div>
+                            <div class="motor-label">M<span class="text-sm align-super text-slate-600">3~</span></div>
+                        </div>
+                        <div class="motor-load-gauge" id="gauge-${compId}">
+                            Load: 60% | I: 0.0A
+                        </div>
+                        <div class="absolute bottom-[-16px] bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full hidden speed-indicator shadow-md">STOP</div>
+                    </div>`;
+            }
+            else if (type === 'timer') {
+                return `
+                    <div class="comp-timer" data-tripped="false" data-energized="false">
+                        <div class="absolute top-2 left-2 text-[10px] font-black text-slate-500 tracking-wider">TIMER</div>
+                        <div class="absolute top-2 right-2 flex gap-2">
+                            <div class="flex flex-col items-center"><div class="timer-led led-pw"></div><span class="text-[8px] font-bold text-slate-400 mt-0.5">PW</span></div>
+                            <div class="flex flex-col items-center"><div class="timer-led led-up"></div><span class="text-[8px] font-bold text-slate-400 mt-0.5">UP</span></div>
+                        </div>
+                        
+                        <div class="timer-dial-bg" title="ตั้งเวลา (ปรับที่เมนูตั้งค่าด้านซ้าย)">
+                            <div class="timer-dial-knob" style="transform: rotate(0deg);"></div>
+                        </div>
+                        <div class="absolute top-[125px] w-full text-center text-[11px] font-black text-slate-600 time-display">5 sec</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 25px;"></div>
+                        <div class="terminal" id="term-${compId}-A1" style="left: 17px; top: 27px;" title="Coil A1 (L)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 12px;">A1</div>
+
+                        <div class="terminal-plate" style="left: 103px; top: 25px;"></div>
+                        <div class="terminal" id="term-${compId}-A2" style="left: 105px; top: 27px;" title="Coil A2 (N)"></div>
+                        <div class="sn10-text" style="left: 99px; top: 12px;">A2</div>
+
+                        <div class="terminal-plate" style="left: 15px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-15" style="left: 17px; top: 147px;" title="Common (15)"></div>
+                        <div class="sn10-text" style="left: 11px; top: 133px;">15</div>
+
+                        <div class="terminal-plate" style="left: 59px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-16" style="left: 61px; top: 147px;" title="NC (16)"></div>
+                        <div class="sn10-text" style="left: 55px; top: 133px;">16</div>
+
+                        <div class="terminal-plate" style="left: 103px; top: 145px;"></div>
+                        <div class="terminal" id="term-${compId}-18" style="left: 105px; top: 147px;" title="NO (18)"></div>
+                        <div class="sn10-text" style="left: 99px; top: 133px;">18</div>
+                    </div>`;
+            }
         }
-      });
-    }
-  </script>
+
+        function saveState() {
+            const state = {
+                components: Array.from(document.querySelectorAll('.draggable-item')).map(el => ({
+                    id: el.id, type: el.dataset.type, left: el.style.left, top: el.style.top,
+                    breaker: el.querySelector('.comp-mainbox') ? el.dataset.breaker : null,
+                    breaker3p: el.querySelector('.comp-breaker3p') ? el.querySelector('.comp-breaker3p').dataset.state : null,
+                    color: el.querySelector('.comp-lamp') ? el.querySelector('.comp-lamp').dataset.color : null,
+                    tripped: el.querySelector('.comp-overload') ? el.querySelector('.comp-overload').dataset.tripped : null,
+                    ampLimit: el.querySelector('.comp-overload') ? (el.dataset.ampLimit || "9") : null,
+                    load: el.dataset.type === 'motor' ? (el.dataset.load || "60") : null,
+                    delay: el.dataset.type === 'timer' ? (el.dataset.delay || "5") : null
+                })),
+                wires: wires.map(w => ({ 
+                    id: w.id, start: w.startId, end: w.endId, color: w.pathElement.style.stroke, 
+                    waypoints: w.waypoints || [] 
+                }))
+            };
+            historyStack.push(state);
+            if (historyStack.length > 30) historyStack.shift();
+        }
+
+        function undo() {
+            if (historyStack.length === 0) return;
+            const state = historyStack.pop();
+            
+            wires.forEach(w => w.pathElement.remove()); wires = [];
+            document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            deselectElement();
+
+            state.components.forEach(c => spawnComponent(c.type, parseFloat(c.left), parseFloat(c.top), c));
+            state.wires.forEach(w => {
+                const sEl = document.getElementById(w.start);
+                const eEl = document.getElementById(w.end);
+                if (sEl && eEl) addWireDirect(w.id, w.start, w.end, w.color, null, w.waypoints);
+            });
+            triggerEvaluation();
+            sysLog("Undo successful.");
+        }
+
+        async function spawnComponent(type, x, y, restoreData = null) {
+            if (!restoreData) {
+                const canDeduct = await syncDeductCredits(2, `ดึงอุปกรณ์ ${type}`);
+                if (!canDeduct) {
+                    return; 
+                }
+                saveState();
+            }
+            
+            const el = document.createElement('div');
+            el.classList.add('draggable-item');
+            const compId = restoreData ? restoreData.id : 'C' + Date.now();
+            el.id = compId;
+            el.dataset.type = type;
+            
+            el.innerHTML = getComponentHTML(type, compId);
+            
+            if (restoreData) {
+                el.style.left = restoreData.left; el.style.top = restoreData.top;
+                if (type === 'lamp' && restoreData.color) {
+                    const lamp = el.querySelector('.comp-lamp');
+                    lamp.dataset.color = restoreData.color;
+                    lamp.querySelector('.lamp-bulb').className = `lamp-bulb color-${restoreData.color}`;
+                }
+                if (type === 'mainbox' && restoreData.breaker === "on") {
+                    el.dataset.breaker = "on";
+                    el.querySelector('.comp-mainbox').classList.add('on');
+                }
+                if (type === 'breaker3p' && restoreData.breaker3p === "on") {
+                    const box = el.querySelector('.comp-breaker3p');
+                    box.classList.remove('off');
+                    box.classList.add('on');
+                    box.dataset.state = "on";
+                }
+                if (type === 'overload') {
+                    el.dataset.ampLimit = restoreData.ampLimit || "9";
+                    const ov = el.querySelector('.comp-overload');
+                    if (restoreData.tripped === "true") {
+                        ov.dataset.tripped = "true";
+                        ov.classList.add('tripped');
+                    }
+                }
+                if (type === 'motor') {
+                    el.dataset.load = restoreData.load || "60";
+                    const gauge = el.querySelector('.motor-load-gauge');
+                    if (gauge) {
+                        gauge.textContent = `Load: ${el.dataset.load}% | I: 0.0A`;
+                    }
+                }
+                if (type === 'timer') {
+                    el.dataset.delay = restoreData.delay || "5";
+                    el.dataset.energized = "false";
+                    el.dataset.tripped = "false";
+                    el.querySelector('.time-display').textContent = el.dataset.delay + " sec";
+                    const maxRotation = 300;
+                    const rotation = (parseFloat(el.dataset.delay) / 30) * maxRotation - (maxRotation / 2);
+                    el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                }
+            } else {
+                el.style.left = (x !== undefined ? x : 100) + 'px';
+                el.style.top = (y !== undefined ? y : 100) + 'px';
+                if (type === 'overload') {
+                    el.dataset.ampLimit = "9";
+                }
+                if (type === 'motor') {
+                    el.dataset.load = "60";
+                }
+                if (type === 'timer') {
+                    el.dataset.delay = "5";
+                    const maxRotation = 300;
+                    const rotation = (5 / 30) * maxRotation - (maxRotation / 2);
+                    el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                }
+            }
+
+            // --- Component Interaction Logic ---
+            if (type === 'mainbox') {
+                const sw = el.querySelector('.breaker-switch');
+                const box = el.querySelector('.comp-mainbox');
+                sw.addEventListener('mousedown', (e) => {
+                    e.stopPropagation(); 
+                    SoundEngine.playClick();
+                    const isOn = box.classList.contains('on');
+                    if (isOn) {
+                        box.classList.remove('on');
+                        el.dataset.breaker = "off";
+                        sysLog("ปิดเมนเบรกเกอร์ (Main Breaker OFF)");
+                        SoundEngine.playBreaker(); 
+                    } else {
+                        box.classList.add('on');
+                        el.dataset.breaker = "on";
+                        sysLog("เปิดเมนเบรกเกอร์ (Main Breaker ON)");
+                        SoundEngine.playBreaker(); 
+                    }
+                    triggerEvaluation();
+                });
+            }
+            else if (type === 'breaker3p') {
+                const handle = el.querySelector('.breaker3p-handle');
+                const box = el.querySelector('.comp-breaker3p');
+                handle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation(); 
+                    SoundEngine.playClick();
+                    const isOff = box.classList.contains('off');
+                    if (isOff) {
+                        box.classList.remove('off');
+                        box.classList.add('on');
+                        box.dataset.state = "on";
+                        sysLog("เปิดเบรกเกอร์ (MCCB ON)");
+                        SoundEngine.playBreaker(); 
+                    } else {
+                        box.classList.remove('on');
+                        box.classList.add('off');
+                        box.dataset.state = "off";
+                        sysLog("ปิดเบรกเกอร์ (MCCB OFF)");
+                        SoundEngine.playBreaker(); 
+                    }
+                    triggerEvaluation();
+                });
+            }
+            else if (type === 'overload') {
+                const ov = el.querySelector('.comp-overload');
+                const tBtn = el.querySelector('.overload-trip-btn');
+                const rBtn = el.querySelector('.overload-reset-btn');
+                
+                tBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    SoundEngine.playClick();
+                    if (ov.dataset.tripped !== "true") {
+                        ov.dataset.tripped = "true";
+                        ov.classList.add('tripped');
+                        sysLog("⚠️ โอเวอร์โหลดทริป! (Test Trip Activated)");
+                        SoundEngine.playTrip(); 
+                        triggerEvaluation();
+                    }
+                });
+
+                rBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    SoundEngine.playClick();
+                    if (ov.dataset.tripped === "true") {
+                        ov.dataset.tripped = "false";
+                        ov.classList.remove('tripped');
+                        sysLog("🔄 รีเซ็ตโอเวอร์โหลดเรียบร้อย (Overload Reset)");
+                        thermalOverloadHeat = 0;
+                        const hb = document.getElementById(`heat-bar-${compId}`);
+                        if (hb) hb.style.width = '0%';
+                        triggerEvaluation();
+                    }
+                });
+            }
+            else if (type.startsWith('button')) {
+                const head = el.querySelector('.btn-head');
+                const btnContainer = el.querySelector('.comp-button');
+                
+                const pressBtn = (e) => {
+                    if (e) e.stopPropagation();
+                    SoundEngine.playClick();
+                    btnContainer.classList.add('pressed');
+                    el.dataset.pressed = "true";
+                    triggerEvaluation();
+                };
+                const releaseBtn = () => {
+                    if (el.dataset.pressed === "true") {
+                        btnContainer.classList.remove('pressed');
+                        el.dataset.pressed = "false";
+                        triggerEvaluation();
+                    }
+                };
+                head.addEventListener('mousedown', pressBtn);
+                head.addEventListener('mouseup', releaseBtn);
+                head.addEventListener('mouseleave', releaseBtn);
+            }
+
+            el.addEventListener('mousedown', startDrag);
+            canvasLayer.appendChild(el);
+            
+            if (!restoreData) sysLog(`เพิ่มอุปกรณ์: ${type}`);
+            triggerEvaluation();
+        }
+
+        // --- Wiring System with Snap Capabilities ---
+        let isWiring = false;
+        let activeWire = null;
+        let startTerminalId = null;
+        let currentWaypoints = []; 
+
+        function getTerminalPos(id) {
+            const el = document.getElementById(id);
+            if(!el) return {x:0, y:0};
+            const rect = el.getBoundingClientRect();
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            return {
+                x: (rect.left - canvasRect.left + rect.width / 2) / currentScale,
+                y: (rect.top - canvasRect.top + rect.height / 2) / currentScale
+            };
+        }
+
+        function getMouseCoords(e) {
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            return {
+                x: (e.clientX - canvasRect.left) / currentScale,
+                y: (e.clientY - canvasRect.top) / currentScale
+            };
+        }
+
+        function createSVGPath() {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.classList.add('wire-path');
+            path.style.stroke = colorSelect.value;
+            path.addEventListener('contextmenu', (e) => { e.preventDefault(); deleteWire(path.dataset.wireId); });
+            path.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && !isWiring) { e.stopPropagation(); selectElement(path, true); }
+            });
+            return path;
+        }
+
+        function drawOrthogonalPath(start, end) {
+            const dx = Math.abs(end.x - start.x);
+            const dy = Math.abs(end.y - start.y);
+            if (dy > dx) {
+                const midY = (start.y + end.y) / 2;
+                return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+            } else {
+                const midX = (start.x + end.x) / 2;
+                return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+            }
+        }
+
+        function generateMultiSegmentOrthogonalPath(startPos, waypoints, endPos) {
+            let pts = [startPos, ...waypoints, endPos];
+            let d = '';
+            for (let i = 0; i < pts.length - 1; i++) {
+                let segment = drawOrthogonalPath(pts[i], pts[i+1]);
+                if (i > 0) {
+                    segment = segment.replace(/^M\s*[-\d.]+\s*[-\d.]+\s*/, '');
+                    d += ' ' + segment;
+                } else {
+                    d += segment;
+                }
+            }
+            return d;
+        }
+
+        function cancelWiring() {
+            if (activeWire) activeWire.remove();
+            isWiring = false;
+            activeWire = null;
+            startTerminalId = null;
+            currentWaypoints = [];
+            document.querySelectorAll('.terminal').forEach(t => t.classList.remove('snap-candidate'));
+        }
+
+        document.addEventListener('contextmenu', (e) => {
+            if (isWiring) { e.preventDefault(); cancelWiring(); }
+        });
+
+        function findNearbyTerminal(e, maxDistance = 30) {
+            const mouseCoords = getMouseCoords(e);
+            let closestTerminal = null;
+            let minDistance = maxDistance;
+
+            document.querySelectorAll('.terminal').forEach(t => {
+                const pos = getTerminalPos(t.id);
+                const dx = pos.x - mouseCoords.x;
+                const dy = pos.y - mouseCoords.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestTerminal = t;
+                }
+            });
+            return closestTerminal;
+        }
+
+        document.addEventListener('mousedown', (e) => {
+            if (e.button !== 0 && e.button !== 2) return;
+            if (e.button === 2) { 
+                if (isWiring) { e.preventDefault(); cancelWiring(); }
+                return;
+            }
+
+            const terminal = e.target.closest('.terminal') || findNearbyTerminal(e, 25);
+
+            if (terminal) {
+                e.stopPropagation();
+                if (!isWiring) {
+                    isWiring = true;
+                    startTerminalId = terminal.id;
+                    currentWaypoints = [];
+                    activeWire = createSVGPath();
+                    activeWire.style.pointerEvents = 'none';
+                    wireLayer.appendChild(activeWire);
+                    updateActiveWirePreview(getTerminalPos(startTerminalId));
+                    sysLog(`เริ่มต้นต่อสายไฟจากขั้ว: ${terminal.id.replace('term-', '')}`);
+                } else {
+                    if (terminal.id !== startTerminalId) {
+                        activeWire.style.pointerEvents = 'auto';
+                        saveState();
+                        const finishedWire = activeWire;
+                        activeWire = null; 
+                        addWireDirect('W' + Date.now(), startTerminalId, terminal.id, finishedWire.style.stroke, finishedWire, [...currentWaypoints]);
+                        cancelWiring();
+                    } else {
+                        cancelWiring();
+                    }
+                }
+                return;
+            }
+
+            if (isWiring) {
+                e.stopPropagation();
+                const pos = getMouseCoords(e);
+                currentWaypoints.push(pos);
+                updateActiveWirePreview(pos);
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX = initialPanX + (e.clientX - panStartX);
+                panY = initialPanY + (e.clientY - panStartY);
+                updateCanvasTransform();
+                return;
+            }
+
+            if (!isWiring || !activeWire) return;
+            
+            const nearbyTerminal = findNearbyTerminal(e, 25);
+            document.querySelectorAll('.terminal').forEach(t => t.classList.remove('snap-candidate'));
+            
+            if (nearbyTerminal && nearbyTerminal.id !== startTerminalId) {
+                nearbyTerminal.classList.add('snap-candidate');
+                updateActiveWirePreview(getTerminalPos(nearbyTerminal.id));
+            } else {
+                updateActiveWirePreview(getMouseCoords(e));
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                initialPanX = panX;
+                initialPanY = panY;
+                return;
+            }
+
+            if (e.button !== 0 || !isWiring) return;
+            const terminal = e.target.closest('.terminal') || findNearbyTerminal(e, 25);
+            if (terminal && terminal.id !== startTerminalId) {
+                e.stopPropagation();
+                activeWire.style.pointerEvents = 'auto';
+                saveState();
+                const finishedWire = activeWire;
+                activeWire = null;
+                addWireDirect('W' + Date.now(), startTerminalId, terminal.id, finishedWire.style.stroke, finishedWire, [...currentWaypoints]);
+                cancelWiring();
+            }
+        });
+
+        function updateActiveWirePreview(currentPos) {
+            if (!startTerminalId) return;
+            const startPos = getTerminalPos(startTerminalId);
+            activeWire.setAttribute('d', generateMultiSegmentOrthogonalPath(startPos, currentWaypoints, currentPos));
+        }
+
+        // เพิ่มจุดเชื่อมต่อสายไฟแบบพาดอ้อมได้หลายส่วน
+        function addWireDirect(id, startId, endId, color, pathEl = null, waypoints = []) {
+            if (!pathEl) {
+                pathEl = createSVGPath();
+                pathEl.style.stroke = color;
+                wireLayer.appendChild(pathEl);
+            }
+            pathEl.dataset.wireId = id;
+            wires.push({ id, startId, endId, pathElement: pathEl, waypoints: waypoints });
+            updateWirePaths();
+            triggerEvaluation();
+            
+            const fromName = startId.replace('term-', '');
+            const toName = endId.replace('term-', '');
+            sysLog(`เชื่อมต่อสายไฟสำเร็จ: [ขั้ว ${fromName}] 🔌 [ขั้ว ${toName}]`);
+        }
+
+        function updateWirePaths() {
+            wires.forEach(w => {
+                const p1 = getTerminalPos(w.startId);
+                const p2 = getTerminalPos(w.endId);
+                w.pathElement.setAttribute('d', generateMultiSegmentOrthogonalPath(p1, w.waypoints || [], p2));
+            });
+        }
+
+        function deleteWire(id) {
+            saveState();
+            const wire = wires.find(w => w.id === id);
+            if (wire) wire.pathElement.remove();
+            wires = wires.filter(w => w.id !== id);
+            if (selectedElementId === id) deselectElement();
+            triggerEvaluation();
+        }
+
+        // --- Dragging Components ---
+        let draggedEl = null;
+        let isDraggingComp = false;
+        let dragOffset = {x:0, y:0};
+
+        function startDrag(e) {
+            if (isWiring || e.target.closest('.terminal') || e.target.closest('.btn-head') || e.target.closest('.breaker-switch') || e.target.closest('.breaker3p-handle') || e.target.closest('.overload-trip-btn') || e.target.closest('.overload-reset-btn') || e.button !== 0) return;
+            e.stopPropagation();
+            draggedEl = e.currentTarget;
+            isDraggingComp = true;
+            selectElement(draggedEl, false);
+            
+            const rect = draggedEl.getBoundingClientRect();
+            dragOffset.x = (e.clientX - rect.left) / currentScale;
+            dragOffset.y = (e.clientY - rect.top) / currentScale;
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            saveState(); 
+        }
+
+        function drag(e) {
+            if (!isDraggingComp || !draggedEl) return;
+            const canvasRect = canvasLayer.getBoundingClientRect();
+            const x = (e.clientX - canvasRect.left) / currentScale - dragOffset.x;
+            const y = (e.clientY - canvasRect.top) / currentScale - dragOffset.y;
+            
+            draggedEl.style.left = Math.round(x / 20) * 20 + 'px';
+            draggedEl.style.top = Math.round(y / 20) * 20 + 'px';
+            updateWirePaths();
+        }
+
+        function stopDrag() {
+            isDraggingComp = false; draggedEl = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        // --- Selection & Properties ---
+        let selectedElementId = null;
+        let selectedType = null;
+
+        function selectElement(el, isWire) {
+            deselectElement();
+            selectedElementId = isWire ? el.dataset.wireId : el.id;
+            selectedType = isWire ? 'wire' : 'component';
+            el.classList.add(isWire ? 'selected-wire' : 'selected-component');
+            document.getElementById('top-actions').classList.remove('hidden');
+            showProperties(el, isWire);
+        }
+
+        function deselectElement() {
+            if (selectedElementId) {
+                const el = selectedType === 'wire' 
+                    ? document.querySelector(`.wire-path[data-wire-id="${selectedElementId}"]`)
+                    : document.getElementById(selectedElementId);
+                if (el) el.classList.remove('selected-wire', 'selected-component');
+            }
+            selectedElementId = null; selectedType = null;
+            document.getElementById('top-actions').classList.add('hidden');
+            propertiesPanel.classList.add('hidden');
+        }
+
+        document.getElementById('btn-top-delete').addEventListener('click', () => {
+            if (!selectedElementId) return;
+            SoundEngine.playClick();
+            if (selectedType === 'wire') { deleteWire(selectedElementId); }
+            else {
+                saveState();
+                wires.filter(w => w.startId.includes(selectedElementId) || w.endId.includes(selectedElementId))
+                     .forEach(w => deleteWire(w.id));
+                document.getElementById(selectedElementId).remove();
+                deselectElement();
+                triggerEvaluation();
+            }
+        });
+
+        // ปลุกฟังก์ชันปิด Properties และ Log ผ่าน Event Listener
+        document.getElementById('btn-prop-close').addEventListener('click', deselectElement);
+        document.getElementById('btn-clear-log').addEventListener('click', () => {
+            document.getElementById('sys-log').innerHTML = '';
+        });
+
+        function showProperties(el, isWire) {
+            if (isWire) return; 
+            const type = el.dataset.type;
+            
+            let html = "";
+            if (type === 'lamp') {
+                const curColor = el.querySelector('.comp-lamp').dataset.color || 'green';
+                html = `
+                    <label class="block font-medium text-slate-700">สีหลอดไฟ:</label>
+                    <select id="prop-lamp-color" class="border border-slate-300 rounded p-1.5 w-full outline-none focus:border-blue-500">
+                        <option value="green" ${curColor==='green'?'selected':''}>เขียว (Green)</option>
+                        <option value="red" ${curColor==='red'?'selected':''}>แดง (Red)</option>
+                        <option value="yellow" ${curColor==='yellow'?'selected':''}>เหลือง (Yellow)</option>
+                    </select>
+                `;
+            } else if (type === 'breaker3p') {
+                html = `<div class="text-slate-500 bg-slate-50 p-3 rounded-lg text-center border text-xs">
+                    <strong class="text-slate-800 text-sm">เบรกเกอร์ 3 เฟส (MCCB)</strong><br>
+                    <p class="mt-1">สวิตช์ตัดต่อวงจรหลัก 3 เฟส (L1, L2, L3)</p>
+                    <p class="text-red-500 font-bold mt-2 mb-1">คลิกที่สวิตช์เพื่อเปิด (ON) หรือปิด (OFF)</p>
+                </div>`;
+            } else if (type === 'overload') {
+                const limit = el.dataset.ampLimit || "9";
+                html = `
+                    <label class="block font-semibold text-slate-700">พิกัดปรับตั้งกระแส (Amps):</label>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-overload-amps" min="1" max="20" step="1" value="${limit}" class="w-full accent-blue-600">
+                        <span id="prop-overload-val" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded border border-blue-200 text-sm shadow-sm">${limit}A</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">Overload Relay Contacts:</strong><br>
+                        - 95 & 96: หน้าสัมผัส NC (ปกติปิด) <br>
+                        - 97 & 98: หน้าสัมผัส NO (ปกติเปิด) <br>
+                        <span class="text-red-500 font-semibold block mt-1">เมื่อทริป: NC จะจาก (ตัดวงจรควบคุม) และ NO จะต่อ (แสดงไฟ Alarm)</span>
+                    </div>
+                `;
+            } else if (type === 'motor') {
+                const load = el.dataset.load || "60";
+                html = `
+                    <label class="block font-semibold text-slate-700">โหลดทางกลมอเตอร์ (Mechanical Load %):</label>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-motor-load" min="0" max="150" step="5" value="${load}" class="w-full accent-emerald-500">
+                        <span id="prop-motor-load-val" class="font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-200 text-sm shadow-sm">${load}%</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">พฤติกรรมกระแสโหลดจำลอง:</strong><br>
+                        - โหลด &lt; 100%: มอเตอร์กินกระแสปกติ (ปลอดภัย)<br>
+                        - โหลด &ge; 100% (Overload Zone): มอเตอร์กินกระแสเกินพิกัดปรับตั้งของโอเวอร์โหลด หากปล่อยให้ทำงานต่อเนื่อง โลหะไบเมทัลจะร้อนสะสมและสั่งทริปป้องกันมอเตอร์เสียหาย!
+                    </div>
+                `;
+            } else if (type === 'timer') {
+                const delay = el.dataset.delay || "5";
+                html = `
+                    <label class="block font-semibold text-slate-700">เวลาหน่วง (Delay Time):</label>
+                    <div class="flex gap-3 items-center my-2">
+                        <input type="range" id="prop-timer-delay" min="1" max="30" step="1" value="${delay}" class="w-full accent-blue-600">
+                        <span id="prop-timer-val" class="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded border border-blue-200 text-sm shadow-sm">${delay}s</span>
+                    </div>
+                    <div class="text-slate-500 text-xs bg-slate-50 p-3 border border-slate-200 rounded-lg mt-3 leading-relaxed">
+                        <strong class="text-slate-700">การทำงาน (On-Delay):</strong><br>
+                        - เมื่อจ่ายไฟเข้า A1-A2 ตัวจับเวลาจะเริ่มนับ<br>
+                        - เมื่อครบเวลา หน้าสัมผัส 15 จะเปลี่ยนจาก 16(NC) ไปต่อกับ 18(NO)<br>
+                        - หากไฟเลี้ยงดับ จะรีเซ็ตกลับทันที
+                    </div>
+                `;
+            }
+            
+            if (html !== "") {
+                propertiesPanel.classList.remove('hidden');
+                propertiesPanel.classList.add('flex');
+                propertiesContent.innerHTML = html;
+                
+                if (type === 'lamp') {
+                    document.getElementById('prop-lamp-color').addEventListener('change', (e) => {
+                        const lamp = el.querySelector('.comp-lamp');
+                        lamp.dataset.color = e.target.value;
+                        lamp.querySelector('.lamp-bulb').className = `lamp-bulb color-${e.target.value}`;
+                    });
+                } else if (type === 'overload') {
+                    const slider = document.getElementById('prop-overload-amps');
+                    const valText = document.getElementById('prop-overload-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.ampLimit = e.target.value;
+                        valText.textContent = e.target.value + "A";
+                        const infoBox = el.querySelector('.ov-info');
+                        if (infoBox) {
+                            infoBox.innerHTML = `RC: ${e.target.value} A<br>95-96: NC<br>97-98: NO`;
+                        }
+                    });
+                } else if (type === 'motor') {
+                    const slider = document.getElementById('prop-motor-load');
+                    const valText = document.getElementById('prop-motor-load-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.load = e.target.value;
+                        valText.textContent = e.target.value + "%";
+                        triggerEvaluation();
+                    });
+                } else if (type === 'timer') {
+                    const slider = document.getElementById('prop-timer-delay');
+                    const valText = document.getElementById('prop-timer-val');
+                    slider.addEventListener('input', (e) => {
+                        el.dataset.delay = e.target.value;
+                        valText.textContent = e.target.value + "s";
+                        el.querySelector('.time-display').textContent = e.target.value + "s sec";
+                        const maxRotation = 300;
+                        const rotation = (e.target.value / 30) * maxRotation - (maxRotation / 2);
+                        el.querySelector('.timer-dial-knob').style.transform = `rotate(${rotation}deg)`;
+                    });
+                }
+            } else {
+                propertiesPanel.classList.add('hidden');
+            }
+        }
+
+        // --- ELECTRICAL SIMULATION ENGINE ---
+        function triggerEvaluation() {
+            if(simulationActive || isExploding) return;
+            simulationActive = true;
+            setTimeout(() => {
+                evaluateElectricalCircuit();
+                simulationActive = false;
+            }, 10);
+        }
+
+        function buildAdjacencyList() {
+            let adj = {};
+            const addEdge = (u, v) => {
+                if(!adj[u]) adj[u] = new Set(); if(!adj[v]) adj[v] = new Set();
+                adj[u].add(v); adj[v].add(u);
+            };
+
+            wires.forEach(w => addEdge(w.startId, w.endId));
+
+            document.querySelectorAll('.draggable-item').forEach(comp => {
+                const id = comp.id;
+                const type = comp.dataset.type;
+
+                if (type === 'breaker3p') {
+                    const box = comp.querySelector('.comp-breaker3p');
+                    if (box.dataset.state === "on") {
+                        addEdge(`term-${id}-L1`, `term-${id}-T1`);
+                        addEdge(`term-${id}-L2`, `term-${id}-T2`);
+                        addEdge(`term-${id}-L3`, `term-${id}-T3`);
+                    }
+                }
+                else if (type === 'button_no' || type === 'button_nc') {
+                    const isPressed = comp.dataset.pressed === "true";
+                    if (isPressed) {
+                        addEdge(`term-${id}-3`, `term-${id}-4`); 
+                    } else {
+                        addEdge(`term-${id}-1`, `term-${id}-2`); 
+                    }
+                }
+                else if (type === 'contactor') {
+                    const isActive = comp.querySelector('.comp-contactor').classList.contains('active');
+                    if (isActive) {
+                        addEdge(`term-${id}-13`, `term-${id}-14`); 
+                        addEdge(`term-${id}-L1`, `term-${id}-T1`); 
+                        addEdge(`term-${id}-L2`, `term-${id}-T2`); 
+                        addEdge(`term-${id}-L3`, `term-${id}-T3`); 
+                    } else {
+                        addEdge(`term-${id}-21`, `term-${id}-22`); 
+                    }
+                }
+                else if (type === 'overload') {
+                    const ov = comp.querySelector('.comp-overload');
+                    const isTripped = ov.dataset.tripped === "true";
+                    
+                    addEdge(`term-${id}-L1`, `term-${id}-T1`);
+                    addEdge(`term-${id}-L2`, `term-${id}-T2`);
+                    addEdge(`term-${id}-L3`, `term-${id}-T3`);
+
+                    if (isTripped) {
+                        addEdge(`term-${id}-97`, `term-${id}-98`);
+                    } else {
+                        addEdge(`term-${id}-95`, `term-${id}-96`);
+                    }
+                }
+                else if (type === 'timer') {
+                    const isTripped = comp.dataset.tripped === "true";
+                    if (isTripped) {
+                        addEdge(`term-${id}-15`, `term-${id}-18`); 
+                    } else {
+                        addEdge(`term-${id}-15`, `term-${id}-16`); 
+                    }
+                }
+            });
+
+            return adj;
+        }
+
+        function getReachableNodes(adjList, startNodes) {
+            let visited = new Set();
+            let queue = [...startNodes];
+            queue.forEach(n => visited.add(n));
+
+            while(queue.length > 0) {
+                let curr = queue.shift();
+                if (adjList[curr]) {
+                    for (let neighbor of adjList[curr]) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+            }
+            return visited;
+        }
+
+        function checkShortCircuit(r) {
+            const isect = (a, b) => {
+                if (!a || !b || a.size === 0 || b.size === 0) return false;
+                for (let x of a) if (b.has(x)) return true;
+                return false;
+            };
+
+            if (isect(r.L1, r.L2)) return "L1 ลัดวงจรกับ L2 (Phase-to-Phase)";
+            if (isect(r.L2, r.L3)) return "L2 ลัดวงจรกับ L3 (Phase-to-Phase)";
+            if (isect(r.L1, r.L3)) return "L1 ลัดวงจรกับ L3 (Phase-to-Phase)";
+            
+            if (isect(r.L1, r.N)) return "L1 ลัดวงจรลง N (Phase-to-Neutral)";
+            if (isect(r.L2, r.N)) return "L2 ลัดวงจรลง N (Phase-to-Neutral)";
+            if (isect(r.L3, r.N)) return "L3 ลัดวงจรลง N (Phase-to-Neutral)";
+            
+            if (isect(r.L1, r.PE)) return "L1 ลัดวงจรลงกราวด์ (Ground Fault)";
+            if (isect(r.L2, r.PE)) return "L2 ลัดวงจรลงกราวด์ (Ground Fault)";
+            if (isect(r.L3, r.PE)) return "L3 ลัดวงจรลงกราวด์ (Ground Fault)";
+
+            return null;
+        }
+
+        async function triggerExplosion(reason) {
+            isExploding = true;
+            SoundEngine.playExplosion(); 
+            const overlay = document.getElementById('explosion-overlay');
+            const reasonText = document.getElementById('explosion-reason');
+            
+            await syncDeductCredits(5, 'เกิดลัดวงจร (Short Circuit)', true);
+
+            document.querySelectorAll('.draggable-item[data-type="mainbox"]').forEach(el => {
+                el.dataset.breaker = "off";
+                el.querySelector('.comp-mainbox').classList.remove('on');
+            });
+            document.querySelectorAll('.draggable-item[data-type="breaker3p"]').forEach(el => {
+                const box = el.querySelector('.comp-breaker3p');
+                box.dataset.state = "off";
+                box.classList.remove('on');
+                box.classList.add('off');
+            });
+            
+            reasonText.innerText = reason;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            workspace.classList.add('shake-effect');
+            
+            sysLog(`💥 ลัดวงจร! สาเหตุ: ${reason} (เบรกเกอร์ทริปอัตโนมัติ)`);
+
+            SoundEngine.stopMotor();
+            wasMotorSpinningGlobal = false;
+
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+                workspace.classList.remove('shake-effect');
+                isExploding = false;
+                evaluateElectricalCircuit(); 
+            }, 1500);
+        }
+
+        function evaluateElectricalCircuit() {
+            const sources = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+
+            document.querySelectorAll('.draggable-item[data-type="mainbox"]').forEach(p => {
+                sources.N.add(`term-${p.id}-N1`); sources.N.add(`term-${p.id}-N2`); sources.N.add(`term-${p.id}-N3`);
+                sources.PE.add(`term-${p.id}-PE1`); sources.PE.add(`term-${p.id}-PE2`); sources.PE.add(`term-${p.id}-PE3`);
+
+                if (p.dataset.breaker === "on") {
+                    sources.L1.add(`term-${p.id}-L1`);
+                    sources.L2.add(`term-${p.id}-L2`);
+                    sources.L3.add(`term-${p.id}-L3`);
+                }
+            });
+
+            let iterations = 0;
+            let changed = true;
+            let currentReachable = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+            let adjList = {};
+
+            while (changed && iterations < 5) {
+                changed = false;
+                iterations++;
+                
+                adjList = buildAdjacencyList();
+                
+                currentReachable.L1 = getReachableNodes(adjList, sources.L1);
+                currentReachable.L2 = getReachableNodes(adjList, sources.L2);
+                currentReachable.L3 = getReachableNodes(adjList, sources.L3);
+                currentReachable.N = getReachableNodes(adjList, sources.N);
+                currentReachable.PE = getReachableNodes(adjList, sources.PE);
+
+                let shortReason = checkShortCircuit(currentReachable);
+                if (shortReason) {
+                    triggerExplosion(shortReason);
+                    currentReachable = { L1: new Set(), L2: new Set(), L3: new Set(), N: new Set(), PE: new Set() };
+                    break;
+                }
+
+                let anyPhase = new Set([...currentReachable.L1, ...currentReachable.L2, ...currentReachable.L3]);
+
+                document.querySelectorAll('.draggable-item[data-type="contactor"]').forEach(comp => {
+                    const k = comp.querySelector('.comp-contactor');
+                    const a1 = `term-${comp.id}-A1`;
+                    const a2 = `term-${comp.id}-A2`;
+                    
+                    const isEnergized = (anyPhase.has(a1) && currentReachable.N.has(a2)) || 
+                                        (anyPhase.has(a2) && currentReachable.N.has(a1));
+                    
+                    const currentlyActive = k.classList.contains('active');
+
+                    if (isEnergized !== currentlyActive) {
+                        if (isEnergized) k.classList.add('active');
+                        else k.classList.remove('active');
+                        changed = true; 
+                    }
+                });
+            }
+
+            let anyPhaseFinal = new Set([...currentReachable.L1, ...currentReachable.L2, ...currentReachable.L3]);
+
+            document.querySelectorAll('.draggable-item[data-type="lamp"]').forEach(comp => {
+                const lamp = comp.querySelector('.comp-lamp');
+                const x1 = `term-${comp.id}-x1`;
+                const x2 = `term-${comp.id}-x2`;
+                
+                const isLit = (anyPhaseFinal.has(x1) && currentReachable.N.has(x2)) || 
+                              (anyPhaseFinal.has(x2) && currentReachable.N.has(x1));
+                
+                if (isLit) lamp.classList.add('active');
+                else lamp.classList.remove('active');
+            });
+
+            wires.forEach(w => {
+                if (anyPhaseFinal.has(w.startId) || currentReachable.N.has(w.startId)) {
+                    w.pathElement.classList.add('wire-live');
+                } else {
+                    w.pathElement.classList.remove('wire-live');
+                }
+            });
+
+            function getPhase(nodeId) {
+                if (currentReachable.L1.has(nodeId)) return 'L1';
+                if (currentReachable.L2.has(nodeId)) return 'L2';
+                if (currentReachable.L3.has(nodeId)) return 'L3';
+                return null;
+            }
+            function areConnected(n1, n2) {
+                return adjList[n1] ? getReachableNodes(adjList, [n1]).has(n2) : false;
+            }
+
+            // --- MOTOR CALCULATION ---
+            document.querySelectorAll('.draggable-item[data-type="motor"]').forEach(comp => {
+                const u1 = `term-${comp.id}-U1`;
+                const v1 = `term-${comp.id}-V1`;
+                const w1 = `term-${comp.id}-W1`;
+                const u2 = `term-${comp.id}-U2`;
+                const v2 = `term-${comp.id}-V2`;
+                const w2 = `term-${comp.id}-W2`;
+                
+                let connectionType = "NONE";
+                let isForward = false;
+                let isReverse = false;
+
+                if (areConnected(u1, w2) && areConnected(v1, u2) && areConnected(w1, v2)) {
+                    let phases = new Set([getPhase(u1), getPhase(v1), getPhase(w1)]);
+                    if (phases.has('L1') && phases.has('L2') && phases.has('L3')) {
+                        connectionType = "DELTA";
+                        const p1 = getPhase(u1), p2 = getPhase(v1), p3 = getPhase(w1);
+                        if ((p1==='L1' && p2==='L2' && p3==='L3') || (p1==='L2' && p2==='L3' && p3==='L1') || (p1==='L3' && p2==='L1' && p3==='L2')) {
+                            isForward = true;
+                        } else {
+                            isReverse = true;
+                        }
+                    }
+                }
+                else if (areConnected(w2, u2) && areConnected(w2, v2)) {
+                    let phases = new Set([getPhase(u1), getPhase(v1), getPhase(w1)]);
+                    if (phases.has('L1') && phases.has('L2') && phases.has('L3')) {
+                        connectionType = "STAR";
+                        const p1 = getPhase(u1), p2 = getPhase(v1), p3 = getPhase(w1);
+                        if ((p1==='L1' && p2==='L2' && p3==='L3') || (p1==='L2' && p2==='L3' && p3==='L1') || (p1==='L3' && p2==='L1' && p3==='L2')) {
+                            isForward = true;
+                        } else {
+                            isReverse = true;
+                        }
+                    }
+                }
+                else if (areConnected(u1, v1) && areConnected(u1, w1)) {
+                    let phases = new Set([getPhase(w2), getPhase(u2), getPhase(v2)]);
+                    if (phases.has('L1') && phases.has('L2') && phases.has('L3')) {
+                        connectionType = "STAR";
+                        const p1 = getPhase(w2), p2 = getPhase(u2), p3 = getPhase(v2);
+                        if ((p1==='L1' && p2==='L2' && p3==='L3') || (p1==='L2' && p2==='L3' && p3==='L1') || (p1==='L3' && p2==='L1' && p3==='L2')) {
+                            isForward = true;
+                        } else {
+                            isReverse = true;
+                        }
+                    }
+                }
+
+                if (connectionType !== "NONE") {
+                    if (comp.dataset.running !== "true") {
+                        comp.dataset.running = "true";
+                        comp.dataset.startTime = Date.now();
+                        sysLog(`มอเตอร์เริ่มหมุน: การต่อวงจรแบบ ${connectionType}`);
+                    }
+                    comp.dataset.connectionType = connectionType;
+                    comp.dataset.direction = isReverse ? 'rev' : 'fwd';
+                } else {
+                    comp.dataset.running = "false";
+                    comp.dataset.connectionType = "NONE";
+                }
+            });
+
+            // --- TIMER LOGIC ---
+            let timerPowerChanged = false;
+            document.querySelectorAll('.draggable-item[data-type="timer"]').forEach(comp => {
+                const a1 = `term-${comp.id}-A1`;
+                const a2 = `term-${comp.id}-A2`;
+                const isEnergized = (anyPhaseFinal.has(a1) && currentReachable.N.has(a2)) || 
+                                    (anyPhaseFinal.has(a2) && currentReachable.N.has(a1));
+                
+                const wasEnergized = comp.dataset.energized === "true";
+                
+                if (isEnergized && !wasEnergized) {
+                    comp.dataset.energized = "true";
+                    comp.dataset.startTime = Date.now();
+                    comp.querySelector('.led-pw').classList.add('on');
+                } else if (!isEnergized && wasEnergized) {
+                    comp.dataset.energized = "false";
+                    comp.dataset.startTime = "0";
+                    
+                    if (comp.dataset.tripped === "true") {
+                        comp.dataset.tripped = "false";
+                        timerPowerChanged = true; 
+                    }
+                    comp.querySelector('.led-pw').classList.remove('on');
+                    comp.querySelector('.led-up').classList.remove('up');
+                }
+            });
+
+            if (timerPowerChanged) {
+                 setTimeout(evaluateElectricalCircuit, 10);
+            }
+        }
+
+        // --- Simulation Interval Loop ---
+        if (thermalInterval) clearInterval(thermalInterval);
+        thermalInterval = setInterval(() => {
+            if (!isExploding) {
+                let circuitNeedsReEval = false;
+
+                // Timer Check
+                document.querySelectorAll('.draggable-item[data-type="timer"]').forEach(comp => {
+                    if (comp.dataset.energized === "true" && comp.dataset.tripped !== "true") {
+                        const startTime = parseInt(comp.dataset.startTime || Date.now());
+                        const delay = parseFloat(comp.dataset.delay || "5") * 1000;
+                        if (Date.now() - startTime >= delay) {
+                            comp.dataset.tripped = "true";
+                            comp.querySelector('.led-up').classList.add('up');
+                            sysLog(`⏱️ Timer ${comp.id} ทำงานครบกำหนด (${comp.dataset.delay}s)`);
+                            circuitNeedsReEval = true;
+                        }
+                    }
+                });
+
+                // Motor Current Check
+                let anyMotorCurrentlySpinning = false;
+                let maxSystemCurrent = 0.0;
+
+                document.querySelectorAll('.draggable-item[data-type="motor"]').forEach(comp => {
+                    const isRunning = comp.dataset.running === "true";
+                    const connType = comp.dataset.connectionType || "NONE";
+                    const loadPercent = parseFloat(comp.dataset.load || "60");
+                    const gauge = document.getElementById(`gauge-${comp.id}`);
+                    const motor = comp.querySelector('.comp-motor');
+                    const ind = motor.querySelector('.speed-indicator');
+
+                    let currentAmps = 0.0;
+
+                    if (isRunning) {
+                        anyMotorCurrentlySpinning = true;
+                        const direction = comp.dataset.direction;
+                        
+                        motor.classList.add(direction === 'fwd' ? 'spin-fwd' : 'spin-rev');
+                        motor.classList.remove(direction === 'fwd' ? 'spin-rev' : 'spin-fwd');
+                        
+                        ind.textContent = (direction === 'fwd' ? "FWD " : "REV ") + connType;
+                        ind.classList.remove('hidden', 'bg-slate-800');
+                        ind.classList.add(direction === 'fwd' ? 'bg-green-600' : 'bg-red-600');
+                        ind.classList.remove(direction === 'fwd' ? 'bg-red-600' : 'bg-green-600');
+
+                        let baseCurrent = (loadPercent / 100.0) * 10.0;
+                        if (connType === "STAR") {
+                            baseCurrent = baseCurrent / 3.0; 
+                        }
+
+                        const elapsedSec = (Date.now() - parseInt(comp.dataset.startTime || Date.now())) / 1000.0;
+                        let inrush = 1.0;
+                        if (elapsedSec < 3.0) {
+                            inrush = 1.0 + 5.0 * Math.exp(-elapsedSec * 1.5); 
+                        }
+
+                        currentAmps = baseCurrent * inrush;
+                        comp.dataset.currentAmps = currentAmps; 
+                        
+                        if (currentAmps > maxSystemCurrent) maxSystemCurrent = currentAmps;
+                        
+                        if (gauge) {
+                            gauge.textContent = `Load: ${loadPercent}% | I: ${currentAmps.toFixed(1)}A`;
+                            if (currentAmps >= (baseCurrent * 1.2) && elapsedSec > 3) {
+                                gauge.classList.add('overloaded');
+                            } else {
+                                gauge.classList.remove('overloaded');
+                            }
+                        }
+                    } else {
+                        comp.dataset.currentAmps = 0;
+                        motor.classList.remove('spin-fwd', 'spin-rev');
+                        ind.textContent = "STOP";
+                        ind.classList.remove('bg-green-600', 'bg-red-600');
+                        ind.classList.add('bg-slate-800');
+                        if (gauge) {
+                            gauge.textContent = `Load: ${loadPercent}% | I: 0.0A`;
+                            gauge.classList.remove('overloaded');
+                        }
+                    }
+                });
+
+                // Manage Motor Sound
+                if (anyMotorCurrentlySpinning && !wasMotorSpinningGlobal && !isExploding) {
+                    SoundEngine.startMotor();
+                    wasMotorSpinningGlobal = true;
+                } else if (!anyMotorCurrentlySpinning && wasMotorSpinningGlobal) {
+                    SoundEngine.stopMotor();
+                    wasMotorSpinningGlobal = false;
+                }
+
+                // Thermal Overload Logic
+                document.querySelectorAll('.draggable-item[data-type="overload"]').forEach(comp => {
+                    const ov = comp.querySelector('.comp-overload');
+                    const id = comp.id;
+                    const ampLimitSetting = parseFloat(comp.dataset.ampLimit || "9");
+                    const isTripped = ov.dataset.tripped === "true";
+                    const heatBar = document.getElementById(`heat-bar-${id}`);
+
+                    if (maxSystemCurrent > 0 && !isTripped) {
+                        if (maxSystemCurrent > ampLimitSetting) {
+                            const overloadRatio = maxSystemCurrent / ampLimitSetting; 
+                            const heatRiseSpeed = (overloadRatio - 1) * 2.5; 
+                            thermalOverloadHeat = Math.min(100, thermalOverloadHeat + heatRiseSpeed);
+                            
+                            if (thermalOverloadHeat > 20 && Math.random() < 0.15) {
+                                sysLog(`⚠️ กระแสเกินพิกัดปรับตั้ง! I: ${maxSystemCurrent.toFixed(1)}A / RC: ${ampLimitSetting}A (สะสมความร้อน ${Math.round(thermalOverloadHeat)}%)`);
+                            }
+
+                            if (thermalOverloadHeat >= 100) {
+                                ov.dataset.tripped = "true";
+                                ov.classList.add('tripped');
+                                SoundEngine.playTrip();
+                                sysLog(`⚠️ โอเวอร์โหลดทริปอัตโนมัติ! เนื่องจากกระแสเกินต่อเนื่อง ${maxSystemCurrent.toFixed(1)}A`);
+                                circuitNeedsReEval = true;
+                            }
+                        } else {
+                            thermalOverloadHeat = Math.max(0, thermalOverloadHeat - 1.5);
+                        }
+                    } else {
+                        thermalOverloadHeat = Math.max(0, thermalOverloadHeat - 3.0);
+                    }
+
+                    if (heatBar) {
+                        heatBar.style.width = `${thermalOverloadHeat}%`;
+                        if (thermalOverloadHeat > 75) heatBar.style.background = '#ef4444';
+                        else if (thermalOverloadHeat > 40) heatBar.style.background = '#f59e0b';
+                        else heatBar.style.background = '#3b82f6';
+                    }
+                });
+
+                if (circuitNeedsReEval) {
+                    evaluateElectricalCircuit();
+                }
+            }
+        }, 400);
+
+        // --- Save & Load File System ---
+        async function exportToFile() {
+            if (!currentUser) {
+                alert("กรุณาเข้าสู่ระบบก่อนบันทึกไฟล์");
+                return;
+            }
+
+            const canDeduct = await syncDeductCredits(100, 'บันทึกไฟล์ (Save)');
+            if (!canDeduct) {
+                return; 
+            }
+
+            const state = {
+                components: Array.from(document.querySelectorAll('.draggable-item')).map(el => ({
+                    id: el.id, type: el.dataset.type, left: el.style.left, top: el.style.top,
+                    breaker: el.querySelector('.comp-mainbox') ? el.dataset.breaker : null,
+                    breaker3p: el.querySelector('.comp-breaker3p') ? el.querySelector('.comp-breaker3p').dataset.state : null,
+                    color: el.querySelector('.comp-lamp') ? el.querySelector('.comp-lamp').dataset.color : null,
+                    tripped: el.querySelector('.comp-overload') ? el.querySelector('.comp-overload').dataset.tripped : null,
+                    ampLimit: el.querySelector('.comp-overload') ? (el.dataset.ampLimit || "9") : null,
+                    load: el.dataset.type === 'motor' ? (el.dataset.load || "60") : null,
+                    delay: el.dataset.type === 'timer' ? (el.dataset.delay || "5") : null
+                })),
+                wires: wires.map(w => ({ 
+                    id: w.id, start: w.startId, end: w.endId, color: w.pathElement.style.stroke, 
+                    waypoints: w.waypoints || [] 
+                }))
+            };
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}`;
+            a.download = `circuit_save_${timeStr}.txt`;
+            
+            a.click();
+            URL.revokeObjectURL(url);
+            sysLog("💾 บันทึกไฟล์วงจรเรียบร้อยแล้ว (Saved)");
+        }
+
+        function importFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const state = JSON.parse(e.target.result);
+                    if (!state.components || !state.wires) throw new Error("Invalid format");
+
+                    wires.forEach(w => w.pathElement.remove()); wires = [];
+                    document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+                    deselectElement();
+                    historyStack = []; 
+                    thermalOverloadHeat = 0;
+
+                    state.components.forEach(c => spawnComponent(c.type, parseFloat(c.left), parseFloat(c.top), c));
+                    
+                    state.wires.forEach(w => {
+                        const sEl = document.getElementById(w.start);
+                        const eEl = document.getElementById(w.end);
+                        if (sEl && eEl) addWireDirect(w.id, w.start, w.end, w.color, null, w.waypoints);
+                    });
+                    
+                    triggerEvaluation();
+                    sysLog(`📂 โหลดไฟล์สำเร็จ: ${file.name}`);
+                } catch (err) {
+                    sysLog(`⚠️ โหลดไฟล์ไม่สำเร็จ: รูปแบบไฟล์ไม่ถูกต้อง`);
+                    console.error("File load error:", err);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; 
+        }
+
+        // --- Bind Global Programmatic Handlers ---
+        document.getElementById('btn-save').addEventListener('click', exportToFile);
+        document.getElementById('btn-load-trigger').addEventListener('click', () => {
+            if (!currentUser) {
+                alert("กรุณาเข้าสู่ระบบก่อนเปิดไฟล์");
+                return;
+            }
+            document.getElementById('file-input').click();
+        });
+        document.getElementById('file-input').addEventListener('change', importFromFile);
+
+        document.getElementById('btn-undo').addEventListener('click', undo);
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            wires.forEach(w => w.pathElement.remove()); wires = [];
+            document.querySelectorAll('.draggable-item').forEach(el => el.remove());
+            historyStack = [];
+            thermalOverloadHeat = 0;
+            sysLog("รีเซ็ตพื้นที่ทำงาน (Workspace reset)");
+            spawnComponent('mainbox', 40, 40, null, true); 
+        });
+
+        document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+            SoundEngine.toggleMute();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isWiring) {
+                cancelWiring();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
+                document.getElementById('btn-top-delete').click();
+            }
+        });
+
+        // --- STATS SYSTEM LOGIC (Using Firebase SDK) ---
+        const statSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        let lastMemberCount = -1;
+
+        async function initVisitorCount() {
+            try {
+                const visitorRef = ref(db, 'stats/visitors');
+                const snapshot = await get(visitorRef);
+                let visitors = snapshot.val() || 0;
+                
+                if (!sessionStorage.getItem('visited')) {
+                    visitors++;
+                    await set(visitorRef, visitors);
+                    sessionStorage.setItem('visited', 'true');
+                }
+                document.getElementById('stat-visitors').textContent = visitors.toLocaleString();
+            } catch (err) {
+                console.error("Visitor count fetch failed", err);
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const now = Date.now();
+                
+                // อัปเดตเวลาออนไลน์ล่าสุด
+                await set(ref(db, `stats/online/${statSessionId}`), now);
+
+                // นับคนออนไลน์
+                const onlineRef = ref(db, 'stats/online');
+                const onlineSnap = await get(onlineRef);
+                if (onlineSnap.exists()) {
+                    const onlineData = onlineSnap.val();
+                    let onlineCount = 0;
+                    const cutoff = now - 30000; 
+                    for (const key in onlineData) {
+                        if (onlineData[key] > cutoff) onlineCount++;
+                    }
+                    document.getElementById('stat-online').textContent = onlineCount || 1;
+                }
+
+                // นับจำนวนสมาชิกทั้งหมด
+                const usersRef = ref(db, 'users');
+                const usersSnap = await get(usersRef);
+                if (usersSnap.exists()) {
+                    const usersData = usersSnap.val();
+                    const memberCount = Object.keys(usersData).length;
+                    document.getElementById('stat-members').textContent = memberCount.toLocaleString();
+                    
+                    if (lastMemberCount !== -1 && memberCount > lastMemberCount) {
+                        const badge = document.getElementById('stat-new-member');
+                        badge.classList.remove('hidden');
+                        setTimeout(() => badge.classList.add('hidden'), 5000); 
+                    }
+                    lastMemberCount = memberCount;
+                }
+
+            } catch (err) {
+                console.error("Stats update failed", err);
+            }
+        }
+
+        setInterval(updateStats, 15000); 
+
+        window.addEventListener('beforeunload', () => {
+            // sendBeacon ยังคงต้องใช้ HTTP endpoint เพื่อความเสถียรตอนปิดหน้าต่าง
+            navigator.sendBeacon(`${FIREBASE_DB_URL}/stats/online/${statSessionId}.json`, JSON.stringify(null));
+        });
+
+        // --- ONLOAD INITIALIZATION ---
+        spawnComponent('mainbox', 40, 40, null, true); 
+        initVisitorCount();
+        updateStats();
+
+    </script>
 </body>
 </html>
